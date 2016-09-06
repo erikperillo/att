@@ -5,9 +5,11 @@ import numpy as np
 import oarg
 
 class InvalidDimensions(Exception):
+    """Exception for unexpected/invalid dimensions."""
     pass
 
 class InvalidDataType(Exception):
+    """Exception for invalid data types."""
     pass
 
 def is_even(num):
@@ -226,8 +228,8 @@ def main():
     img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
     pyr_lvl = oarg.Oarg("-p --pyr-lvl", 3, "levels for pyramid") 
     str_cs_kizes= oarg.Oarg("-c --cs-ks", "3,7", "center-surround kernel sizes") 
-    max_w = oarg.Oarg("-w --max-w", 800, "maximum width for image")
-    max_h = oarg.Oarg("-h --max-h", 600, "maximum hwight for image")
+    max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
+    max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
     debug = oarg.Oarg("-d --debug", False, "debug mode")
     save_dir = oarg.Oarg("-s --save-dir", "", "directory to save images")
     hlp = oarg.Oarg("-h --help", False, "this help message")
@@ -242,7 +244,7 @@ def main():
 
     #checking validity of args
     if not img_file.found:
-        error("image file not found")
+        error("image file not found (use -h for help)")
 
     img = cv2.imread(img_file.val)
 
@@ -265,7 +267,6 @@ def main():
 
     #getting center-surround kernel sizes
     cs_ksizes = map(int, str_cs_kizes.val.split(","))
-    print cs_ksizes
 
     ims = []
     #computing intensity maps
@@ -292,6 +293,7 @@ def main():
                 save(on_im, "%s/%s_on_map.png" % (save_dir.val, label))
                 save(off_im, "%s/%s_off_map.png" % (save_dir.val, label))
 
+    #computing final intensity map
     final_im = sum(ims)
     
     #displaying final result
@@ -301,7 +303,7 @@ def main():
 
     #saving final result
     if save_dir.val:
-        save(im, "%s/final_map.png" % save_dir.val)
+        save(final_im, "%s/final_map.png" % save_dir.val)
 
 if __name__ == "__main__":
     main()
