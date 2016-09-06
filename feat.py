@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import oarg
+import os
 
 #functions for getting components of Lab image. assumes image is already in Lab
 LAB_ATTR_FUNCS = {
@@ -245,8 +246,8 @@ def main():
     str_feats = oarg.Oarg("-f --features", "l1,l0,r,g,b,y", "features to use")
     max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
     max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
-    debug = oarg.Oarg("-d --debug", False, "debug mode")
-    save_dir = oarg.Oarg("-s --save-dir", "", "directory to save images")
+    debug = oarg.Oarg("-d --debug", True, "debug mode")
+    save_dir = oarg.Oarg("-s --save-dir", ".", "directory to save images")
     hlp = oarg.Oarg("-h --help", False, "this help message")
 
     #parsing args
@@ -268,6 +269,8 @@ def main():
         error("could not read image")
     if len(img.shape) < 3:
         error("image must be colored")
+
+    print "on file %s" % img_file.val
     
     #resizing image
     img = resize(img, max_w.val, max_h.val)
@@ -284,10 +287,13 @@ def main():
     cs_ksizes = str_to_list(str_cs_ksizes.val, int)
     feats = str_to_list(str_feats.val, str)
 
+    #getting file name without extension
+    f_name = ".".join(os.path.basename(img_file.val).split(".")[:-1])
+
     ims = []
     #computing intensity maps
     for feat in feats:
-        print "in %s ..." % feat
+        print "\ton feature '%s' ..." % feat
         input_img = get_lab_attr(img, feat)
         db_im, im = intensity_map(input_img, pyr_lvl.val, cs_ksizes,    
             debug=debug)
@@ -303,9 +309,10 @@ def main():
 
         #saving images
         if save_dir.val:
-            save(im, "%s/%s_map.png" % (save_dir.val, feat))
+            save(im, "%s/%s_%s_map.png" % (save_dir.val, f_name, feat))
             if debug:
-                save(db_im, "%s/%s_db_map.png" % (save_dir.val, feat))
+                save(db_im, "%s/%s_%s_db_map.png" % \
+                    (save_dir.val, f_name, feat))
 
     #computing final intensity map
     final_im = sum(ims)
@@ -317,7 +324,7 @@ def main():
 
     #saving final result
     if save_dir.val:
-        save(final_im, "%s/final_map.png" % save_dir.val)
+        save(final_im, "%s/%s_final_map.png" % (save_dir.val, f_name))
 
 if __name__ == "__main__":
     main()
