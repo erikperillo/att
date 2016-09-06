@@ -4,6 +4,16 @@ import cv2
 import numpy as np
 import oarg
 
+#functions for getting components of Lab image. assumes image is already in Lab
+LAB_ATTR_FUNCS = {
+    "l1": lambda x: x[:, :, 0],
+    "l0": lambda x: inv(LAB_ATTR_FUNCS["l1"](x)),
+    "r": lambda x: x[:, :, 1],
+    "g": lambda x: inv(LAB_ATTR_FUNCS["r"](x)),
+    "y": lambda x: x[:, :, 2],
+    "b": lambda x: inv(LAB_ATTR_FUNCS["y"](x))
+}
+
 class InvalidDimensions(Exception):
     """Exception for unexpected/invalid dimensions."""
     pass
@@ -11,6 +21,24 @@ class InvalidDimensions(Exception):
 class InvalidDataType(Exception):
     """Exception for invalid data types."""
     pass
+
+def inv(img):
+    """Inverts image."""
+    return img.max() - img
+
+def get_lab_attr(img, attr, cvt=True):
+    """Gets Lab colorspace plane attr from image. Assumes img is in BGR."""
+    #converting image to lab if required
+    if cvt:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2Lab)
+
+    attr = attr.lower()
+    #checking validity of argument
+    if not attr in LAB_ATTR_FUNCS:
+        raise TypeError("invalid attr '%s' (use: %s)" % \
+            (attr, ",".join(LAB_ATTR_FUNCS)))
+
+    return LAB_ATTR_FUNCS[attr](img)
 
 def is_even(num):
     return num % 2 == 0
@@ -26,7 +54,7 @@ def pyr_prepare(img, pyr_lvl):
     """Reshapes image so as to be down/up sampled and keep original shape."""
     return mk_divisable(img, 2**pyr_lvl)
 
-def get_center_surround_kernel(size, dtype=np.float32, on=True):
+def get_center_surround_kernel(size, dtype=np.float32):
     """Gets kernel to be used in convolution to perform center-surround
         operation on image."""
     size = int(size)
@@ -44,7 +72,7 @@ def get_center_surround_kernel(size, dtype=np.float32, on=True):
     kernel = weight*np.ones(dtype=dtype, shape=(size, size))
     kernel[size/2, size/2] = 1.0
 
-    return kernel if on else -kernel
+    return kernel
 
 def center_surround(img, kernel):
     """Performs center-surround operation on image with given kernel."""
@@ -115,13 +143,13 @@ def append(img1, img2, hor=True):
     """Appends two images either horizontally or vertically."""
     return h_append(img1, img2) if hor else v_append(img1, img2)
 
-def _intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), on=True, 
+def intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7),
     dtype=np.float32, debug=False):
     """Gets intensity map by by summing up center_surround on
         multiple scales, and kernel sizes.
         If debug is True, returns image with intermediate results."""
     #getting all kernels
-    cs_kernels = [get_center_surround_kernel(ks, dtype, on) for ks in cs_ksizes]
+    cs_kernels = [get_center_surround_kernel(ks, dtype) for ks in cs_ksizes]
     #initial value for intensity map
     im_img = np.zeros(dtype=dtype, shape=img.shape)
     #debug image
@@ -154,27 +182,6 @@ def _intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), on=True,
                 v_append(debug_img, db_img) 
 
     return debug_img, im_img
-
-def intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), 
-    dtype=np.float32, debug=False):
-    """Gets intensity map by by summing up center_surround on
-        multiple scales, kernel sizes and types (on/off).
-        If debug is True, returns image with intermediate results."""
-    #on type intensity map
-    on_debug, on_im = _intensity_map(img, pyr_lvl, cs_ksizes, True, 
-        debug=debug)
-    #off type intensity map
-    off_debug, off_im = _intensity_map(img, pyr_lvl, cs_ksizes, False,
-        debug=debug)
-    #getting final intensity map
-    final_im = on_im + off_im
-
-    #updating debug image
-    if debug:
-        on_debug = v_append(on_debug, on_im)
-        off_debug = v_append(off_debug, off_im)
-    
-    return (on_debug, off_debug), final_im
 
 def str_dim(img):
     """Returns a string with image dimensions (height x width x depth)."""
@@ -223,11 +230,19 @@ def resize(img, max_w, max_h, scale=0.75):
 
     return img
 
+def str_to_list(string, tp, delim=","):
+    """Divides string separated by delimiter and converts to tp."""
+    return map(tp, string.split(delim))
+
 def main():
     #command-line arguments
     img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
     pyr_lvl = oarg.Oarg("-p --pyr-lvl", 3, "levels for pyramid") 
-    str_cs_kizes= oarg.Oarg("-c --cs-ks", "3,7", "center-surround kernel sizes") 
+    #must be comma-separated
+    str_cs_ksizes= oarg.Oarg("-c --cs-ks", "3,7", 
+        "center-surround kernel sizes") 
+    #must be comma-separated
+    str_feats = oarg.Oarg("-f --features", "l1,l0,r,g,b,y", "features to use")
     max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
     max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
     debug = oarg.Oarg("-d --debug", False, "debug mode")
@@ -266,32 +281,31 @@ def main():
     display(img, "original image", False)
 
     #getting center-surround kernel sizes
-    cs_ksizes = map(int, str_cs_kizes.val.split(","))
+    cs_ksizes = str_to_list(str_cs_ksizes.val, int)
+    feats = str_to_list(str_feats.val, str)
 
     ims = []
     #computing intensity maps
-    for label, img in zip("Lab", (l, a, b)):
-        print "in %s ..." % label
-        db_ims, im = intensity_map(img, pyr_lvl.val, cs_ksizes,    
+    for feat in feats:
+        print "in %s ..." % feat
+        input_img = get_lab_attr(img, feat)
+        db_im, im = intensity_map(input_img, pyr_lvl.val, cs_ksizes,    
             debug=debug)
         
         #displaying images
-        display(img, "input image %s" % label)
-        display(im, "intensity map %s" % label)
+        display(img, "input image %s" % feat)
+        display(im, "intensity map %s" % feat)
         if debug:
-            on_im, off_im = db_ims
-            display(on_im, "on intensity_map %s" % label)
-            display(off_im, "off intensity_map %s" % label)
+            display(db_im, "intermediary intensity_map %s" % feat)
 
         #appending partial intensity map
         ims.append(im)
 
         #saving images
         if save_dir.val:
-            save(im, "%s/%s_map.png" % (save_dir.val, label))
+            save(im, "%s/%s_map.png" % (save_dir.val, feat))
             if debug:
-                save(on_im, "%s/%s_on_map.png" % (save_dir.val, label))
-                save(off_im, "%s/%s_off_map.png" % (save_dir.val, label))
+                save(db_im, "%s/%s_db_map.png" % (save_dir.val, feat))
 
     #computing final intensity map
     final_im = sum(ims)
