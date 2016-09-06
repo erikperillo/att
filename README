@@ -1,1 +1,6 @@
 This repo tests out some computational attentional methods.
+
+usage:
+	./feat.py <image_path>
+
+Use -h for more info.
