@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 
 import im
+import feat as ft
 import cvx
 import cv2
 import os
@@ -75,7 +76,7 @@ def main():
     #computing intensity maps
     for feat in feats:
         print "\ton feature '%s' ..." % feat
-        input_img = im.get_feature(img, feat)
+        input_img = ft.get_feature(img, feat)
         db_im, imap = im.intensity_map(input_img, pyr_lvl.val, cs_ksizes,    
             debug=debug)
         
