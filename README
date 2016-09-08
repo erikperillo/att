@@ -1,6 +1,12 @@
 This repo tests out some computational attentional methods.
 
-usage:
-	./feat.py <image_path>
+-Usage
+	$ ./att.py <image_path>
+	Use -h for more info.
 
-Use -h for more info.
+-Dependencies
+	-oarg (https://github.com/erikperillo/oarg_py)
+	-cvx (https://github.com/erikperillo/cvx)
+	-numpy
+	-cv2
+	Both oarg and cvx can be obtained via $ pip install <pkg_name>.
