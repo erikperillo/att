@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 import im
 import feat as ft
@@ -11,14 +11,14 @@ def error(msg, code=1):
     """
     Prints error message and exits with code.
     """
-    print "error:", msg
+    print("error:", msg)
     exit(code)
 
 def str_to_list(string, tp, delim=","):
     """
     Divides string separated by delimiter and converts to tp.
     """
-    return map(tp, string.split(delim))
+    return list(map(tp, string.split(delim)))
 
 def main():
     #command-line arguments
@@ -55,7 +55,7 @@ def main():
     if len(img.shape) < 3:
         error("image must be colored")
 
-    print "on file %s" % img_file.val
+    print("on file %s" % img_file.val)
     
     #resizing image
     img = cvx.resize(img, max_w.val, max_h.val)
@@ -74,27 +74,27 @@ def main():
 
     ims = []
     #computing intensity maps
-    for feat in feats:
-        print "\ton feature '%s' ..." % feat
-        input_img = ft.get_feature(img, feat)
+    for feature in feats:
+        print("\ton feature '%s' ..." % feature)
+        input_img = ft.get_feature(img, feature)
         db_im, imap = im.intensity_map(input_img, pyr_lvl.val, cs_ksizes,    
-            debug=debug)
+            debug=debug.val)
         
         #displaying images
-        cvx.display(input_img, "input image %s" % feat)
-        cvx.display(imap, "intensity map %s" % feat)
+        cvx.display(input_img, "input image %s" % feature)
+        cvx.display(imap, "intensity map %s" % feature)
         if debug:
-            cvx.display(db_im, "intermediary intensity_map %s" % feat)
+            cvx.display(db_im, "intermediary intensity_map %s" % feature)
 
         #appending partial intensity map
         ims.append(imap)
 
         #saving images
         if save_dir.val:
-            cvx.save(imap, "%s/%s_%s_map.png" % (save_dir.val, f_name, feat))
+            cvx.save(imap, "%s/%s_%s_map.png" % (save_dir.val, f_name, feature))
             if debug:
                 cvx.save(db_im, "%s/%s_%s_db_map.png" % \
-                    (save_dir.val, f_name, feat))
+                    (save_dir.val, f_name, feature))
 
     #computing final intensity map
     final_im = sum(ims)

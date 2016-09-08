@@ -30,7 +30,7 @@ def get_center_surround_kernel(size, dtype=np.float32):
     #creating kernel
     weight = -1.0/(size**2 - 1)
     kernel = weight*np.ones(dtype=dtype, shape=(size, size))
-    kernel[size/2, size/2] = 1.0
+    kernel[size//2, size//2] = 1.0
 
     return kernel
 
@@ -93,7 +93,7 @@ def intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
     debug_img = None
 
     #iterating over pyramid levels (from 0 to pyr_lvl)
-    for i in xrange(pyr_lvl+1):
+    for i in range(pyr_lvl+1):
         #getting downsampled image
         img = cv2.pyrDown(img) if i > 0 else img
         #partial debug image
@@ -101,7 +101,7 @@ def intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
 
         for ki, k in enumerate(cs_kernels):
             #getting center-surround image 
-            cs_img = center_surround(img, weight_f(pyr_lvl, ki)*k)
+            cs_img = center_surround(img, weight_f(i, ki)*k)
             #updating debug partial image
             if debug:
                 db_img = cs_img if db_img is None else \

@@ -1,24 +1,37 @@
 """
-Module for feature calculations.
+Module for feature extractions.
 """
 
 import cv2
-from cvx import inv
+import cvx
 import numpy as np
 
 #functions for getting components of Lab image. assumes image is already in Lab
 LAB_ATTR_FUNCS = {
+    #luminance on
     "l1": lambda x: x[:, :, 0],
-    "l0": lambda x: inv(LAB_ATTR_FUNCS["l1"](x)),
+    #luminance off
+    "l0": lambda x: cvx.inv(LAB_ATTR_FUNCS["l1"](x)),
+    #red
     "r": lambda x: x[:, :, 1],
-    "g": lambda x: inv(LAB_ATTR_FUNCS["r"](x)),
+    #green
+    "g": lambda x: cvx.inv(LAB_ATTR_FUNCS["r"](x)),
+    #yellow
     "y": lambda x: x[:, :, 2],
-    "b": lambda x: inv(LAB_ATTR_FUNCS["y"](x))
+    #blue
+    "b": lambda x: cvx.inv(LAB_ATTR_FUNCS["y"](x))
 }
+
+def get_available_features():
+    """
+    Gets available features.
+    """
+    return list(LAB_ATTR_FUNCS.keys())
 
 def get_lab_attr(img, attr, cvt=True):
     """
-    Gets Lab colorspace plane attr from image. Assumes img is in BGR.
+    Gets Lab colorspace plane attr from image. 
+    Assumes img is either in Lab or in BGR.
     """
     #converting image to lab if required
     if cvt:
