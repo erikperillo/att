@@ -38,13 +38,14 @@ def get_center_surround_kernel(size, dtype=np.float32):
 
     return kernel
 
-def center_surround(img, kernel):
+def center_surround(img, kernel, clip=True):
     """!
     Performs center-surround operation on image with given kernel.
     Assumes image is one-dimensional.
 
     @param img Input image.
     @param kernel Center-surround kernel to apply to image.
+    @param clip If True, clip result for positive values only.
     """
     #checking validity of image dimensions
     if len(img.shape) > 2:
@@ -54,9 +55,9 @@ def center_surround(img, kernel):
     ddepth = cv2.CV_32F if kernel.dtype == np.float32 else cv2.CV_64F
     cs_img = cv2.filter2D(img, ddepth, kernel)
 
-    return cs_img.clip(min=0.0)
+    return cs_img.clip(min=0.0) if clip else cs_img
 
-def im_pyr_one(lvl):
+def im_pyr_lvl_one(lvl):
     """!
     Default weight function of pyramid level for intensity_map.
 
@@ -72,14 +73,14 @@ def im_cs_ksize_one(size):
     """
     return 1.0
 
-def im_weight_one(lvl, cs_ksize):
+def im_weight_one(pyr_lvl, cs_ksize):
     """!
     Default weight function for intensity map.
 
     @param lvl Pyramid level.
     @param cs_ksize Center-surround kernel size.
     """
-    return im_pyr_one(x)*im_cs_ksize_one(y)
+    return im_pyr_lvl_one(pyr_lvl)*im_cs_ksize_one(cs_ksize)
 
 class IMLCWeightFunc(object):
     """!

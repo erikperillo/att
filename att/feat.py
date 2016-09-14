@@ -27,15 +27,15 @@ LAB_ATTR_FUNCS = {
 ##Default values for gabor kernel.
 DEF_GABOR_K_PARAMS = {
     #kernel size
-    "ksize": 2*(21,),
+    "ksize": 2*(25,),
     #std of gaussian used in kernel
-    "sigma": 5.0,
+    "sigma": 2.0,
     #orientation in radians
     "theta": 0.0,
     #wavelenght of sinusoidal factor
-    "lambd": 1.0,
+    "lambd": 5.0,
     #spatial aspect ratio
-    "gamma": 0.5,
+    "gamma": 0.33,
     #phase offset
     "psi": 0.0,
     #kernel output type
@@ -49,9 +49,9 @@ ORIENTATIONS = {
     #horizontal
     "hor": np.pi/2,
     #left diagonal
-    "l_diag": np.pi/4,
+    "r_diag": np.pi/4,
     #right diagonal
-    "r_diag": -np.pi/4
+    "l_diag": -np.pi/4
 }
 
 def get_available_features():
@@ -93,7 +93,7 @@ def _get_gabor_kernel(**custom_params):
 
     return kernel
 
-def gabor_filter(img, kernel_params={}, cvt=True):
+def gabor_filter(img, kernel_params={}, cvt=True, clip=True):
     """!
     Gets gabor kernel and applies to image.
     Assumes image comes in either grayscale or BGR.
@@ -101,6 +101,7 @@ def gabor_filter(img, kernel_params={}, cvt=True):
     @param img Input image.
     @param kernel_params Parameters for Gabor kernel. 
     @param cvt If True, convert image to grayscale.
+    @param clip If True, clip result for positive values only.
     """
     #converting image to grayscale if required
     if cvt:
@@ -112,7 +113,7 @@ def gabor_filter(img, kernel_params={}, cvt=True):
     dtype = cv2.CV_32F if kernel.dtype == np.float32 else cv2.CV_64F
     img = cv2.filter2D(img, dtype, kernel)  
 
-    return img
+    return img.clip(min=0.0) if clip else img
 
 def get_orientation_map(img, orientation):
     """!
@@ -125,7 +126,7 @@ def get_orientation_map(img, orientation):
     #getting available directions
     rad_orientation = ORIENTATIONS[orientation]
 
-    return gabor_filter(img, {"theta": rad_orientation})
+    return gabor_filter(img, {"theta": rad_orientation}, cvt=True)
 
 def get_feature(img, feat):
     """!
