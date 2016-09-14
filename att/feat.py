@@ -1,12 +1,14 @@
-"""
-Module for feature extractions.
+"""!
+@package feat
+@brief Module for feature extractions.
 """
 
 import cv2
 import cvx
 import numpy as np
 
-#functions for getting components of Lab image. assumes image is already in Lab
+
+##Functions for getting features from Lab image.
 LAB_ATTR_FUNCS = {
     #luminance on
     "l1": lambda x: x[:, :, 0],
@@ -22,7 +24,7 @@ LAB_ATTR_FUNCS = {
     "b": lambda x: cvx.inv(LAB_ATTR_FUNCS["y"](x))
 }
 
-#default values for gabor kernel.
+##Default values for gabor kernel.
 DEF_GABOR_K_PARAMS = {
     #kernel size
     "ksize": 2*(21,),
@@ -40,7 +42,7 @@ DEF_GABOR_K_PARAMS = {
     "ktype": cv2.CV_32F
 }
 
-#default orientations available
+##Default orientations available as features.
 ORIENTATIONS = {
     #vertical
     "ver": 0.0,
@@ -53,15 +55,19 @@ ORIENTATIONS = {
 }
 
 def get_available_features():
-    """
+    """!
     Gets available features.
     """
     return list(LAB_ATTR_FUNCS.keys()) + list(ORIENTATIONS.keys())
 
 def get_lab_attr(img, attr, cvt=True):
-    """
-    Gets Lab colorspace plane attr from image. 
+    """!
+    Gets feature calculable from Lab image.
     Assumes img is either in Lab or in BGR.
+
+    @param img Input image.
+    @param attr Feature to extract. See #LAB_ATTR_FUNCS.
+    @param cvt If True, convert image to Lab colorspace.
     """
     #converting image to lab if required
     if cvt:
@@ -75,8 +81,11 @@ def get_lab_attr(img, attr, cvt=True):
     return LAB_ATTR_FUNCS[attr](img)
 
 def _get_gabor_kernel(**custom_params):
-    """
-    Wrapper for OpenCV's getGaborKernel.
+    """!
+    Gets gabor kernel for application on image.
+    
+    @param custom_params 
+    Parameters for Gabor kernel to override #DEF_GABOR_K_PARAMS.
     """
     params = dict(DEF_GABOR_K_PARAMS) 
     params.update(custom_params)
@@ -85,9 +94,13 @@ def _get_gabor_kernel(**custom_params):
     return kernel
 
 def gabor_filter(img, kernel_params={}, cvt=True):
-    """
+    """!
     Gets gabor kernel and applies to image.
     Assumes image comes in either grayscale or BGR.
+
+    @param img Input image.
+    @param kernel_params Parameters for Gabor kernel. 
+    @param cvt If True, convert image to grayscale.
     """
     #converting image to grayscale if required
     if cvt:
@@ -102,8 +115,12 @@ def gabor_filter(img, kernel_params={}, cvt=True):
     return img
 
 def get_orientation_map(img, orientation):
-    """
+    """!
     Gets orientation map in some of the directions.
+    Assumes image is in BGR.
+
+    @param img Input image.
+    @param orientation Orientation feature to compute.
     """
     #getting available directions
     rad_orientation = ORIENTATIONS[orientation]
@@ -111,8 +128,12 @@ def get_orientation_map(img, orientation):
     return gabor_filter(img, {"theta": rad_orientation})
 
 def get_feature(img, feat):
-    """
-    Gets feature map from image. Assumes image comes in BGR colorspace.
+    """!
+    Gets feature map from image. 
+    Assumes image comes in BGR colorspace.
+
+    @param img Input image.
+    @param feat Feature to extract.
     """
     #preprocessing input
     feat = feat.lower()

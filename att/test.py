@@ -29,7 +29,7 @@ def main():
         "center-surround kernel sizes") 
     #must be comma-separated
     str_feats = oarg.Oarg("-f --features", 
-        "l1,l0,r,g,b,y,hor,ver", "features to use")
+        "l1,l0,r,g,b,y,hor,ver,l_diag,r_diag", "features to use")
     max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
     max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
     debug = oarg.Oarg("-d --debug", True, "debug mode")
@@ -67,31 +67,6 @@ def main():
     img = cvx.resize(img, max_w.val, max_h.val)
     #adapting image dimensions for proper pyramid up/downscaling
     img = cvx.pyr_prepare(img, pyr_lvl.val)
-
-    ##test area
-    if False:
-        import numpy as np
-
-        gk = cv2.getGaborKernel(
-            ksize=2*(21,),
-            sigma=4.0,
-            theta=-np.pi/4,
-            lambd=10.0,
-            gamma=1.0,
-            psi=0.4,
-            ktype=cv2.CV_32F
-        ) 
-
-        gk2 = ft._get_gabor_kernel()
-
-
-        for o in ft.GABOR_ORIENTATIONS:
-            gk_img = ft.get_orientation_map(img, o)
-            cvx.display(gk_img, "gabor %s" % o)
-
-        cv2.waitKey(0)
-        exit()
-    ##
 
     #displaying original image
     cvx.display(img, "original image", False)

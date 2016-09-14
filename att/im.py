@@ -1,26 +1,30 @@
-"""
-Module for intensity map calculations.
+"""!
+@package im
+@brief Module for intensity map calculations.
 """
 
 import cv2
 import cvx
 import numpy as np
 
-def is_even(num):
+def _is_even(num):
     """
     Self-explanatory.
     """
     return num % 2 == 0
 
 def get_center_surround_kernel(size, dtype=np.float32):
-    """
+    """!
     Gets kernel to be used in convolution to perform center-surround
     operation on image.
+
+    @param size Size of kernel.
+    @param dtype Type of returned kernel.
     """
     size = int(size)
 
     #checking validity of arguments
-    if is_even(size):
+    if _is_even(size):
         raise InvalidDimensions("kernel size must be odd")
     if size < 2:
         raise InvalidDimensions("kernel size must be bigger than 1")
@@ -35,8 +39,12 @@ def get_center_surround_kernel(size, dtype=np.float32):
     return kernel
 
 def center_surround(img, kernel):
-    """
+    """!
     Performs center-surround operation on image with given kernel.
+    Assumes image is one-dimensional.
+
+    @param img Input image.
+    @param kernel Center-surround kernel to apply to image.
     """
     #checking validity of image dimensions
     if len(img.shape) > 2:
@@ -48,42 +56,69 @@ def center_surround(img, kernel):
 
     return cs_img.clip(min=0.0)
 
-def im_pyr_one(x):
-    """
+def im_pyr_one(lvl):
+    """!
     Default weight function of pyramid level for intensity_map.
+
+    @param lvl Pyramid level. 
     """
     return 1.0
 
-def im_cs_ksize_one(x):
-    """
+def im_cs_ksize_one(size):
+    """!
     Default weight function of center-surround kernel size for intensity_map.
+
+    @param size Size of center-surround kernel.
     """
     return 1.0
 
-def im_weight_one(x, y):
-    """
+def im_weight_one(lvl, cs_ksize):
+    """!
     Default weight function for intensity map.
+
+    @param lvl Pyramid level.
+    @param cs_ksize Center-surround kernel size.
     """
     return im_pyr_one(x)*im_cs_ksize_one(y)
 
 class IMLCWeightFunc(object):
-    """
+    """!
     Class for intensity map weight functions used for 
     linear combinations of maps.
     """
     def __init__(self, pyr_f, cs_ksize_f):
+        """!
+        Initializer for class.
+        """
+        ##Weight function for pyramid level.
         self.pyr_f = pyr_f
+        ##Weight function for center-surround kernel size.
         self.cs_ksize_f = cs_ksize_f
 
-    def __call__(self, x, y):
-        return self.pyr_f(x)*self.cs_ksize_f(y)
+    def __call__(self, pyr_lvl, cs_ksize):
+        """!
+        Computes total weight function as the product of the functions.
+        
+        @param pyr_lvl Pyramid level.
+        @param cs_ksize Center-surround kernel size.
+        """
+        return self.pyr_f(pyr_lvl)*self.cs_ksize_f(cs_ksize)
 
-def intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
+def intensity_map(img, pyr_lvls=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
     dtype=np.float32, debug=False):
-    """
+    """!
     Gets intensity map by by summing up center_surround on
-    multiple scales, and kernel sizes.
-    If debug is True, returns image with intermediate results.
+    multiple scales and kernel sizes.
+    Assumes image is one-dimensional.
+    The resultant intensity map is a linear combination of the intermediary
+    maps.
+
+    @param pyr_lvls Pyramids levels to calculate.
+    @param cs_ksizes Center-surround kernel sizes.
+    @param weight_f Function to compute weight of map from pyramid level and
+        center-surround kernel size.
+    @param dtype Type of output image.
+    @param debug If True, returns intermediary intendity maps.
     """
     #getting all kernels
     cs_kernels = [get_center_surround_kernel(ks, dtype) for ks in cs_ksizes]
@@ -92,8 +127,8 @@ def intensity_map(img, pyr_lvl=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
     #debug image
     debug_img = None
 
-    #iterating over pyramid levels (from 0 to pyr_lvl)
-    for i in range(pyr_lvl+1):
+    #iterating over pyramid levels (from 0 to pyr_lvls)
+    for i in range(pyr_lvls+1):
         #getting downsampled image
         img = cv2.pyrDown(img) if i > 0 else img
         #partial debug image

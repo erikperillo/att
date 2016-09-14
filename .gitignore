@@ -2,5 +2,6 @@
 *.png
 *.swp
 __pycache__/
-debug_imgs/
 att/cvx.py
+doc/*
+!doc/Doxyfile
