@@ -6,12 +6,94 @@
 import cv2
 import cvx
 import numpy as np
+from itertools import combinations
+
+def _id(x):
+    """!
+    Identity function.
+    """
+    return x
 
 def _is_even(num):
-    """
+    """!
     Self-explanatory.
     """
     return num % 2 == 0
+
+def _custom_dict(def_dict, custom_params):
+    """!
+    Returns a copy of def_dict with some of its values changed by custom_params.
+    """
+    new_dict = dict(def_dict)
+    new_dict.update(custom_params)
+
+    return new_dict
+
+def _euclid_dist(vec_1, vec_2):
+    """!
+    Euclidean distance of two vectors.
+    """
+    return np.sqrt(sum((x1 - x2)**2 for x1, x2 in zip(vec_1, vec_2)))
+
+def _dists(points, dist_f=_euclid_dist):
+    """!
+    Computes the distances of a set of points.
+    """
+    return map(lambda vecs: dist_f(*vecs), combinations(points, 2))
+
+def _cc(img, conn=8, dtype=cv2.CV_16U):
+    """!
+    Performs connected components on image. 
+    Returns a set of stats for components (x, y, w, h) and centroids (x, y).
+    """
+    *__, stats, centroids = cv2.connectedComponentsWithStats(img, conn, dtype)
+
+    return stats, centroids
+
+def _frac_threshold(img, max_frac=0.75):
+    """!
+    Fractional Threshold. Only values above specified fraction will be white.
+    """
+    thresh = int(img.max()*max_frac)
+
+    return cv2.threshold(img, thresh, 255, cv2.THRESH_BINARY)[1]
+
+def _otsu_threshold(img):
+    """!
+    Adaptative Otshu threshold.
+    """
+    return cv2.threshold(img, 0, 255, cv2.THRESH_OTSU)[1]
+
+##Available threshold functions.
+THRESH_FUNCS = {
+    "otsu": _otsu_threshold,
+    "frac": _frac_threshold
+}
+
+def _square(img):
+    """!
+    Self-explanatory.
+    """
+    return img**2
+
+def _clahe(img, clip_limit=2.0, grid_size=8):
+    """!
+    Contrast Limited Adaptive Histogram Equalization.
+    """
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=2*(grid_size,))
+
+    return clahe.apply(img)
+
+##Available contrast operations.
+CONTRAST_FUNCS = {
+    #square of image
+    "square": _square,
+    "sq": _square,
+    #adaptative contrast
+    "clahe": _clahe,
+    #nothing
+    "none": _id
+}
 
 def get_center_surround_kernel(size, dtype=np.float32):
     """!
@@ -82,29 +164,6 @@ def im_weight_one(pyr_lvl, cs_ksize):
     """
     return im_pyr_lvl_one(pyr_lvl)*im_cs_ksize_one(cs_ksize)
 
-class IMLCWeightFunc(object):
-    """!
-    Class for intensity map weight functions used for 
-    linear combinations of maps.
-    """
-    def __init__(self, pyr_f, cs_ksize_f):
-        """!
-        Initializer for class.
-        """
-        ##Weight function for pyramid level.
-        self.pyr_f = pyr_f
-        ##Weight function for center-surround kernel size.
-        self.cs_ksize_f = cs_ksize_f
-
-    def __call__(self, pyr_lvl, cs_ksize):
-        """!
-        Computes total weight function as the product of the functions.
-        
-        @param pyr_lvl Pyramid level.
-        @param cs_ksize Center-surround kernel size.
-        """
-        return self.pyr_f(pyr_lvl)*self.cs_ksize_f(cs_ksize)
-
 def intensity_map(img, pyr_lvls=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
     dtype=np.float32, debug=False):
     """!
@@ -156,3 +215,224 @@ def intensity_map(img, pyr_lvls=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
                 cvx.v_append(debug_img, db_img) 
 
     return debug_img, im_img
+
+def _cc_cm_dists(cc_params):
+    """!
+    Computes distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    __, centroids = cc_params
+    #calculating euclidean distance of centroids
+    dists = _dists(centroids)
+
+    return dists
+
+def _cc_sum_cm_dists(cc_params):
+    """!
+    Sum of distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    return sum(_cc_cm_dists(cc_params))
+
+def _cc_cm_dists_mean(cc_params):
+    """!
+    Mean distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    __, centroids = cc_params
+    return _cc_sum_cm_dists(cc_params)/len(centroids)
+
+def _cc_ssq_cm_dists(cc_params):
+    """!
+    Sum of squares of distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    return sum(x**2 for x in _cc_cm_dists(cc_params))
+
+def _cc_rssq_cm_dists(cc_params):
+    """!
+    Root-sum-of-squares of distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    return np.sqrt(_cc_ssq_cm_dists(cc_params))
+
+def _cc_sq_cm_dists_mean(cc_params):
+    """!
+    Mean of squares of distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    __, centroids = cc_params
+    return _cc_ssq_cm_dists(cc_params)/len(centroids)
+
+def _cc_sq_cm_dists_mean_sqr(cc_params):
+    """!
+    Root of mean of squares of distances of centroids of connected components.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    return np.sqrt(_cc_sq_cm_dists_mean(cc_params))
+
+##Available weight functions for #cc_norm.
+CC_NORM_SCORE_FUNCS = {
+    #mean of center of mass distances
+    "cmdm": _cc_cm_dists_mean,
+    #root of sum of squares of center of mass distances
+    "cmdrssq": _cc_rssq_cm_dists,
+    #mean of squares of center of mass distances
+    "cmdsqm": _cc_sq_cm_dists_mean,
+    #root of mean of squares of center of mass distances
+    "cmdrsqm": _cc_sq_cm_dists_mean_sqr
+}
+
+def _cc_norm(im, contrast_f, thresh_f, conn_comps_f, morph_f, score_f, 
+    debug=False):
+    """!
+    Applies intensity map normalization via connected components method.
+
+    @param im Intensity map to use.
+    @param thresh_f Threshold function to use.
+    @param conn_comps_f Connected components function to use.
+    @param morph_op Morphological operation function to use.
+    @param score_f Score (based on connected components) function to use.
+    """
+    #debug values
+    db_vals = None
+
+    #applying contrast operation
+    im = contrast_f(im)
+    if debug:
+        db_vals = [im]
+
+    #converting to uint8 if required
+    if im.dtype != np.uint8:
+        _im = np.array(cvx.scale(im, 0, 255), dtype=np.uint8)
+    else:
+        _im = im
+
+    #calculating threshold image
+    thr_im = thresh_f(_im)
+    if debug:
+        db_vals.append(thr_im)
+
+    #applying morphological operation
+    thr_im = morph_f(thr_im)
+    if debug:
+        db_vals.append(thr_im)
+
+    #computing connected components
+    stats = conn_comps_f(thr_im)
+    if debug:
+        db_vals.append(stats)
+
+    #getting 1/weight for image
+    score = score_f(stats)
+    if debug:
+        db_vals.append(score)
+    
+    return db_vals, im/score
+
+def cc_norm(im, 
+    thr_type="otsu", thr_args={},
+    contrast_type="sq", contrast_args={},
+    morph_op_args={"erosion_ksize": 3, "dilation_ksize": 7, "opening": True},
+    cc_args={"conn": 8},
+    score_type="cmdrssq", score_args={},
+    debug=False):
+    """!
+    Builds functions and calls #_cc_norm.
+
+    @param thr_type Threshold type to apply. See #THRESH_FUNCS.
+    @param thr_args Arguments for threshold function.
+    @param contrast_type Type of contrast to apply. See #CONTRAST_FUNCS.
+    @param contrast_args Arguments for contrast function.
+    @param morph_op_args Arguments for morphological operation.
+    @param cc_args Arguments for connected components method.
+    @param score_type Type of weight function. See #CC_NORM_SCORE_FUNCS.
+    @param score_args Arguments for weight function.
+    @param debug Retrns intermediate images.
+    """
+    contrast_f = lambda x: CONTRAST_FUNCS[contrast_type](x, **contrast_args)
+    thr_f = lambda x: THRESH_FUNCS[thr_type](x, **thr_args)
+    cc_f = lambda x: _cc(x, **cc_args)
+    morph_f = lambda x: cvx.morph_op(x, **morph_op_args)
+    score_f = lambda x: CC_NORM_SCORE_FUNCS[score_type](x, **score_args)
+
+    return _cc_norm(im, contrast_f, thr_f, cc_f, morph_f, score_f, debug=debug)
+
+def _frac_norm(im, thr_f, debug=False):
+    """!
+    Applies intensity map normalization via fractional method.    
+    
+    @param thr_f Threshold function to apply.
+    @param debug Returns intermediate images.
+    """
+    #converting to uint8 if necessary
+    if im.dtype != np.uint8:
+        _im = np.array(cvx.scale(im, 0, 255), dtype=np.uint8)
+    else:
+        _im = im
+
+    #debug values
+    db_vals = None
+
+    #applying threshold
+    _im = thr_f(img)
+    if debug:
+        db_vals = [_im]
+    
+    #getting number of pixels with high activations
+    whites = cv2.countNonZero(_im)
+    #total number of pixels
+    size = im.shape[0]*im.shape[1]
+
+    return db_vals, im*(1.0 - whites/size)**2
+
+def frac_norm(im, thr_type="otsu", thr_args={}):
+    """!
+    Builds functions and calls #_frac_norm.
+
+    @param thr_type Threshold type to apply. See #THRESH_FUNCS.
+    @param thr_args Arguments for threshold function.
+    """
+    thr_f = lambda x: THRESH_FUNCS[thr_type](x, **thr_args)
+
+    return _frac_norm(im, thr_f)
+
+##Intensity map normalization available methods.
+IM_NORM_FUNCS = {
+    #connected components normalization
+    "cc": cc_norm,
+    #fractional normalization
+    "frac": frac_norm
+}
+
+def normalize(im, method="cc", **kwargs):
+    """!
+    Normalizes intensity-map.
+
+    @param method Method to use. See #IM_NORM_FUNCS.
+    """
+    method = method.lower()
+
+    return IM_NORM_FUNCS[method](im, **kwargs) 
+
+##Available linear combination functions for intensity maps.
+IM_COMBINE_FUNCS = {
+    "sum": sum
+}
+
+def combine(ims, method="sum"):
+    """!
+    Returns linear combination of sum of intensity maps.
+
+    @method Method to use. See #IM_COMBINE_FUNCS.
+    """
+    method = method.lower()
+
+    return IM_COMBINE_FUNCS[method](ims)
