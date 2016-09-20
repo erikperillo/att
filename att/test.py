@@ -90,6 +90,7 @@ def main():
     blur_ksize = oarg.Oarg("-b --blur-ksize", 5, 
         "gaussian kernel size for blur")
     debug = oarg.Oarg("-d --debug", True, "debug mode")
+    display = oarg.Oarg("-D --display", True, "display images")
     list_fts = oarg.Oarg("-l --list-features", False, "list available features")
     save_dir = oarg.Oarg("-s --save-dir", ".", "directory to save images")
     hlp = oarg.Oarg("-h --help", False, "this help message")
@@ -128,7 +129,8 @@ def main():
     img = pre_proc(img, {"ksize": 2*(blur_ksize.val,)})
 
     #displaying original image
-    cvx.display(img, "original image", False)
+    if display.val:
+        cvx.display(img, "original image", False)
 
     #getting center-surround kernel sizes
     cs_ksizes = str_to_list(str_cs_ksizes.val, int)
@@ -148,15 +150,16 @@ def main():
 
         #normalizing map
         norm_db, norm_imap = im.normalize(imap, method="cc", 
-            morph_op_args={"erosion_ksize": None, "dilation_ksize": 21,
+            morph_op_args={"erosion_ksize": 5, "dilation_ksize": 21,
                 "opening": True},
             score_type="cmdrsqm",
             debug=True)
  
         #displaying images
-        cvx.display(input_img, "input image %s" % feature)
-        cvx.display(imap, "intensity map %s" % feature)
-        if debug.val:
+        if display.val:
+            cvx.display(input_img, "input image %s" % feature)
+            cvx.display(imap, "intensity map %s" % feature)
+        if debug.val and display.val:
             cvx.display(db_im, "intermediary intensity_map %s" % feature)
             ctr_im, __, thr_im, __, score = norm_db
             print("\t\timap norm weight: 1/%f = %f" % (score, 1/score))
@@ -175,19 +178,20 @@ def main():
                     (save_dir.val, f_name, feature))
 
     #computing final intensity map
-    final_im = sum(ims)
-    final_im_norm = sum(norm_ims)
+    final_im = im.combine(ims)
+    final_im_norm = im.combine(norm_ims)
 
     #displaying final result
-    cvx.display(final_im, "final intensity map")
-    cvx.display(final_im_norm, "final intensity map normalized")
-    cvx.display(mark(final_im_norm), "selected regions", False)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    if display.val:
+        cvx.display(final_im, "final intensity map")
+        cvx.display(final_im_norm, "final intensity map normalized")
+        cvx.display(mark(final_im_norm), "selected regions", False)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     #saving final result
     if save_dir.val:
-        cvx.save(final_im, "%s/%s_final_map.png" % (save_dir.val, f_name))
+        cvx.save(final_im_norm, "%s/%s_final_map.png" % (save_dir.val, f_name))
 
 if __name__ == "__main__":
     main()

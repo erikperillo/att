@@ -159,7 +159,7 @@ def im_weight_one(pyr_lvl, cs_ksize):
     """!
     Default weight function for intensity map.
 
-    @param lvl Pyramid level.
+    @param pyr_lvl Pyramid level.
     @param cs_ksize Center-surround kernel size.
     """
     return im_pyr_lvl_one(pyr_lvl)*im_cs_ksize_one(cs_ksize)
@@ -173,6 +173,7 @@ def intensity_map(img, pyr_lvls=3, cs_ksizes=(3, 7), weight_f=im_weight_one,
     The resultant intensity map is a linear combination of the intermediary
     maps.
 
+    @param img Input image.
     @param pyr_lvls Pyramids levels to calculate.
     @param cs_ksizes Center-surround kernel sizes.
     @param weight_f Function to compute weight of map from pyramid level and
@@ -290,16 +291,18 @@ CC_NORM_SCORE_FUNCS = {
     "cmdrsqm": _cc_sq_cm_dists_mean_sqr
 }
 
-def _cc_norm(im, contrast_f, thresh_f, conn_comps_f, morph_f, score_f, 
+def cc_norm_(im, contrast_f, thresh_f, conn_comps_f, morph_op_f, score_f, 
     debug=False):
     """!
     Applies intensity map normalization via connected components method.
 
-    @param im Intensity map to use.
+    @param im Input intensity map.
+    @param contrast_f Contrast function to use.
     @param thresh_f Threshold function to use.
     @param conn_comps_f Connected components function to use.
-    @param morph_op Morphological operation function to use.
+    @param morph_op_f Morphological operation function to use.
     @param score_f Score (based on connected components) function to use.
+    @param debug Returns intermediary images.
     """
     #debug values
     db_vals = None
@@ -321,7 +324,7 @@ def _cc_norm(im, contrast_f, thresh_f, conn_comps_f, morph_f, score_f,
         db_vals.append(thr_im)
 
     #applying morphological operation
-    thr_im = morph_f(thr_im)
+    thr_im = morph_op_f(thr_im)
     if debug:
         db_vals.append(thr_im)
 
@@ -340,13 +343,14 @@ def _cc_norm(im, contrast_f, thresh_f, conn_comps_f, morph_f, score_f,
 def cc_norm(im, 
     thr_type="otsu", thr_args={},
     contrast_type="sq", contrast_args={},
-    morph_op_args={"erosion_ksize": 3, "dilation_ksize": 7, "opening": True},
-    cc_args={"conn": 8},
+    morph_op_args={},
+    cc_args={},
     score_type="cmdrssq", score_args={},
     debug=False):
     """!
-    Builds functions and calls #_cc_norm.
+    Builds functions and calls #cc_norm_.
 
+    @param im Input intensity map.
     @param thr_type Threshold type to apply. See #THRESH_FUNCS.
     @param thr_args Arguments for threshold function.
     @param contrast_type Type of contrast to apply. See #CONTRAST_FUNCS.
@@ -355,7 +359,7 @@ def cc_norm(im,
     @param cc_args Arguments for connected components method.
     @param score_type Type of weight function. See #CC_NORM_SCORE_FUNCS.
     @param score_args Arguments for weight function.
-    @param debug Retrns intermediate images.
+    @param debug Returns intermediate images.
     """
     contrast_f = lambda x: CONTRAST_FUNCS[contrast_type](x, **contrast_args)
     thr_f = lambda x: THRESH_FUNCS[thr_type](x, **thr_args)
@@ -363,12 +367,13 @@ def cc_norm(im,
     morph_f = lambda x: cvx.morph_op(x, **morph_op_args)
     score_f = lambda x: CC_NORM_SCORE_FUNCS[score_type](x, **score_args)
 
-    return _cc_norm(im, contrast_f, thr_f, cc_f, morph_f, score_f, debug=debug)
+    return cc_norm_(im, contrast_f, thr_f, cc_f, morph_f, score_f, debug=debug)
 
-def _frac_norm(im, thr_f, debug=False):
+def frac_norm_(im, thr_f, debug=False):
     """!
     Applies intensity map normalization via fractional method.    
     
+    @param im Input intensity map.
     @param thr_f Threshold function to apply.
     @param debug Returns intermediate images.
     """
@@ -395,14 +400,15 @@ def _frac_norm(im, thr_f, debug=False):
 
 def frac_norm(im, thr_type="otsu", thr_args={}):
     """!
-    Builds functions and calls #_frac_norm.
+    Builds functions and calls #frac_norm_.
 
+    @param im input intensity map.
     @param thr_type Threshold type to apply. See #THRESH_FUNCS.
     @param thr_args Arguments for threshold function.
     """
     thr_f = lambda x: THRESH_FUNCS[thr_type](x, **thr_args)
 
-    return _frac_norm(im, thr_f)
+    return frac_norm_(im, thr_f)
 
 ##Intensity map normalization available methods.
 IM_NORM_FUNCS = {
@@ -416,7 +422,9 @@ def normalize(im, method="cc", **kwargs):
     """!
     Normalizes intensity-map.
 
+    @param im Input intensity map.
     @param method Method to use. See #IM_NORM_FUNCS.
+    @param kwargs Other arguments to be passed to chosen methods.
     """
     method = method.lower()
 
@@ -431,7 +439,8 @@ def combine(ims, method="sum"):
     """!
     Returns linear combination of sum of intensity maps.
 
-    @method Method to use. See #IM_COMBINE_FUNCS.
+    @param ims Intensity maps list.
+    @param method Method to use. See #IM_COMBINE_FUNCS.
     """
     method = method.lower()
 
