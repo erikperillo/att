@@ -27,17 +27,17 @@ LAB_ATTR_FUNCS = {
 ##Default values for gabor kernel.
 DEF_GABOR_K_PARAMS = {
     #kernel size
-    "ksize": 2*(25,),
+    "ksize": 2*(11,),
     #std of gaussian used in kernel
     "sigma": 2.0,
     #orientation in radians
     "theta": 0.0,
     #wavelenght of sinusoidal factor
-    "lambd": 5.0,
+    "lambd": 4.0,
     #spatial aspect ratio
-    "gamma": 0.33,
+    "gamma": 1.0,
     #phase offset
-    "psi": 0.0,
+    "psi": 3.0,
     #kernel output type
     "ktype": cv2.CV_32F
 }
@@ -104,7 +104,7 @@ def gabor_filter(img, kernel_params={}, cvt=True, clip=True):
     @param clip If True, clip result for positive values only.
     """
     #converting image to grayscale if required
-    if cvt:
+    if cvt and len(img.shape) > 2:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     #getting kernel
@@ -115,33 +115,39 @@ def gabor_filter(img, kernel_params={}, cvt=True, clip=True):
 
     return img.clip(min=0.0) if clip else img
 
-def get_orientation_map(img, orientation):
+def get_orientation_map(img, orientation, gabor_kernel_params={}, 
+    cvt=True, clip=True):
     """!
     Gets orientation map in some of the directions.
     Assumes image is in BGR.
 
     @param img Input image.
     @param orientation Orientation feature to compute.
+    @param gabor_kernel_params Extra gabor kernel parameters.
+    @param cvt Convert image from BGR to grayscale.
+    @param clip It True, clip result for positive values only.
     """
     #getting available directions
     rad_orientation = ORIENTATIONS[orientation]
+    gabor_kernel_params.update({"theta": rad_orientation})
 
-    return gabor_filter(img, {"theta": rad_orientation}, cvt=True)
+    return gabor_filter(img, gabor_kernel_params, cvt, clip)
 
-def get_feature(img, feat):
+def get_feature(img, feat, **kwargs):
     """!
     Gets feature map from image. 
     Assumes image comes in BGR colorspace.
 
     @param img Input image.
     @param feat Feature to extract.
+    @param kwargs Extra arguments for feature extraction function.
     """
     #preprocessing input
     feat = feat.lower()
 
     if feat in LAB_ATTR_FUNCS:
-        return get_lab_attr(img, attr=feat)
+        return get_lab_attr(img, attr=feat, **kwargs)
     elif feat in ORIENTATIONS:
-        return get_orientation_map(img, orientation=feat)
+        return get_orientation_map(img, orientation=feat, **kwargs)
 
     raise ValueError("unknown feature '%s'" % feat)

@@ -1,6 +1,7 @@
 *.pyc
 *.png
 *.swp
+*.swo
 __pycache__/
 att/cvx.py
 doc/*
