@@ -113,7 +113,7 @@ def in_mask(img, mask):
     """
     total = img.sum()
     in_mask = (img & mask).sum()
-    
+
     return total, in_mask
 
 def benchmark():
@@ -160,7 +160,8 @@ def benchmark():
     total, within_mask = in_mask(img, bm_img)
     if use_mask.val:
         intersects = (mask_img & bm_img).any()
-        intersection_frac = mask_img.sum()/max(1, bm_img.sum())
+        frac_in_bm_mask = (mask_img & bm_img).sum()/max(1, mask_img.sum())
+        frac_of_bm_mask = (mask_img & bm_img).sum()/max(1, bm_img.sum())
 
     #printing results
     #print("Comparing {} and {}".format(bm_img_filepath.val, img_filepath.val))
@@ -169,8 +170,9 @@ def benchmark():
         .format(total, within_mask, within_mask/max(total, 1)))
     if use_mask.val:
         print("Masked image:\n\tIntersects with benchmark mask?: {}"
-            "\n\tFraction of intersection: {}"\
-            .format(intersects, intersection_frac))
+            "\n\tFraction of model mask within benchmark mask: {}"
+            "\n\tFraction of benchmark mask guessed by model: {}"\
+            .format(intersects, frac_in_bm_mask, frac_of_bm_mask))
     
     #displaying images if required
     if display.val:
