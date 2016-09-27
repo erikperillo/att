@@ -35,6 +35,9 @@ IM_NORM_PARAMS = {
 PYR_W_F = im._one
 #center-surround kernel size weight function
 CS_W_F = im._one
+#mask parameters
+MASK_FRAC = 0.5
+MASK_DIL_KSIZE = 11
 
 def error(msg, code=1):
     """
@@ -104,10 +107,24 @@ def gabor_kernel_view(kernel, size=100):
     """
     return cv2.resize(kernel, (size, size))
 
+def in_mask(img, mask):
+    """!
+    Computes how much of img is within masked area.
+    """
+    total = img.sum()
+    in_mask = (img & mask).sum()
+    
+    return total, in_mask
+
 def benchmark():
     bm_img_filepath = oarg.Oarg("-b --bm-img", "", "path to benchmark image", 0) 
     img_filepath = oarg.Oarg("-i --img", "", "path to image", 1) 
     display = oarg.Oarg("-D --display", True, "display images")
+    use_mask = oarg.Oarg("-M --mask", False, "use mask")
+    img_mask_filepath = oarg.Oarg("-m --mask-path", "", "mask filepath")
+    #mask_frac = oarg.Oarg("-f --mask-frac", 0.8, "fraction param for mask")
+    #mask_dil_ksize = oarg.Oarg("-d --mask-dil-ksize", 32, 
+    #    "mask dilation ksize")
     hlp = oarg.Oarg("-h --help", False, "this help message")
 
     oarg.parse(sys.argv)
@@ -120,26 +137,48 @@ def benchmark():
     #checking validity of args
     if not img_filepath.found or not bm_img_filepath.found:
         error("image file not found (use -h for help)")
+    if use_mask.val and not img_mask_filepath.found:
+        error("image mask file not found (use -h for help)")
 
+    #loading images
     bm_img = cv2.imread(bm_img_filepath.val, 0)
     img = cv2.imread(img_filepath.val, 0)
+    if use_mask.val:
+        mask_img = cv2.imread(img_mask_filepath.val, 0)
+        if mask_img is None:
+            error("could not read mask image")
+        mask_img = cv2.resize(mask_img, bm_img.shape[::-1])
 
     #checking validity of image
     if img is None or bm_img is None:
         error("could not read image")
 
+    #resizing images to be the same dimension
     img = cv2.resize(img, bm_img.shape[::-1])
-    mask_img = img & bm_img
 
+    #similarity measures
+    total, within_mask = in_mask(img, bm_img)
+    if use_mask.val:
+        intersects = (mask_img & bm_img).any()
+        intersection_frac = mask_img.sum()/max(1, bm_img.sum())
+
+    #printing results
+    #print("Comparing {} and {}".format(bm_img_filepath.val, img_filepath.val))
+    print("Non-masked image:\n\tTotal pix values: {}"
+        "\n\tIn mask: {}\n\tFraction in mask: {}"\
+        .format(total, within_mask, within_mask/max(total, 1)))
+    if use_mask.val:
+        print("Masked image:\n\tIntersects with benchmark mask?: {}"
+            "\n\tFraction of intersection: {}"\
+            .format(intersects, intersection_frac))
+    
     #displaying images if required
     if display.val:
         cvx.display(bm_img, "bm_img")
         cvx.display(img, "img")
-        cvx.display(mask_img, "mask_img")
+        if use_mask.val:
+            cvx.display(mask_img, "mask_img")
         cv2.waitKey(0)
-
-    print("Intersection:", mask_img.any())
-    print("Intersection %:", mask_img.sum()/bm_img.sum())
 
 def gabor_test():
     #command-line arguments
@@ -326,7 +365,7 @@ def im_test():
     #getting final saliency map
     final_im = im.combine([imaps["col"], imaps["cst"], imaps["ort"]])
     #getting saliency mask
-    final_im_mask = mask(final_im)
+    final_im_mask = mask(final_im, MASK_DIL_KSIZE, MASK_FRAC)
 
     #saving final result
     if save_dir.val:
@@ -445,7 +484,7 @@ def main():
         benchmark()
     else:
         print("unknown test '%s' (use %s)" %\
-             (test, " or ".join(("im", "gabor"))))
+             (test, " or ".join(("im", "gabor", "feat", "bm"))))
 
 if __name__ == "__main__":
     main()

@@ -3,12 +3,14 @@
 @brief Module for intensity map calculations.
 """
 
+
 import cv2
 import cvx
 import feat
 import numpy as np
 from itertools import combinations_with_replacement
 from functools import reduce
+
 
 def _id(x):
     """!
@@ -231,7 +233,7 @@ def cc_norm_(im, contrast_f, thresh_f, conn_comps_f, morph_op_f, score_f,
     if debug:
         db_vals.append(score)
     
-    return db_vals, im/score
+    return db_vals, im/max(score, 1)
 
 def cc_norm(im, 
     thr_type="otsu", thr_args={},
@@ -604,7 +606,7 @@ def orientation_map(img, orientations=list(feat.ORIENTATIONS.keys()),
     if debug:
         return _debug_unpack(img, map_iter, line=True)
     else:
-        return sum(_img for __, _img in map_iter)
+        return None, sum(_img for __, _img in map_iter)
 
 ##Available saliency map functions.
 MAP_FUNCTIONS = {
