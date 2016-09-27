@@ -12,7 +12,7 @@ bm_masks_ext=".png"
 #command to execute benchmark in format: $cmd <bm_img> <img>
 bm_cmd="./test.py bm"
 #number of random images to take from source images dir
-sample=200
+sample=3
 #directory where everything will be stored.
 #if gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
@@ -29,6 +29,8 @@ bm_cmd_flags="-D -M -m"
 #result images format
 map_ext="_final_map.png"
 map_mask_ext="_final_map_mask.png"
+#result file
+bm_file=$main_dir/benchmark.txt
 
 fname()
 {
@@ -64,7 +66,8 @@ run()
 
 	for f in $main_dir/imgs/*; do
 		#echo "in $f..."
-		$att_cmd $f $att_cmd_flags
+		time $att_cmd $f $att_cmd_flags
+		echo
 	done	
 }
 
@@ -78,15 +81,21 @@ bm()
 		if [ -f "$f" ]; then
 			echo "comparing $bm_f and $f"
 			$bm_cmd $bm_f $f $bm_cmd_flags $mask_f
+			echo
 		fi
 	done
 }
 
-echo "generating data..."
-gen_data
-echo "running model..."
-run
-echo "executing benchmark..."
-bm
+main()
+{
+	echo "generating data..."
+	gen_data
+	echo "running model..."
+	run 2>&1 | tee -a $bm_file
+	echo "executing benchmark..."
+	bm 2>&1 | tee -a $bm_file
+}
+
+main
 
 exit 0
