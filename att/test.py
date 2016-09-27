@@ -22,6 +22,20 @@ GAUSSIAN_BLUR_DEF_PARAMS = {
     "borderType": cv2.BORDER_DEFAULT
 }
 
+#intensity map normalization method
+IM_NORM_METHOD = "cc"
+#intensity map normalization parameters
+IM_NORM_PARAMS = {
+    "thr_type": "otsu",
+    "contrast_type": "sq",
+    "score_type": "cmdrssq",
+    "morph_op_args": {"erosion_ksize": 5, "dilation_ksize": 31, "opening": True}
+}
+#pyramid weight function
+PYR_W_F = im._one
+#center-surround kernel size weight function
+CS_W_F = im._one
+
 def error(msg, code=1):
     """
     Prints error message and exits with code.
@@ -55,7 +69,7 @@ def pre_proc(img, blur_params):
 
     return img
 
-def mark(img, dilation_ksize=31, frac=0.9, color=(0, 0, 255)):
+def mask(img, dilation_ksize=31, frac=0.8):
     """
     Marks whitest areas on image.
     """
@@ -66,6 +80,14 @@ def mark(img, dilation_ksize=31, frac=0.9, color=(0, 0, 255)):
     __, thr_img = cv2.threshold(img, int(frac*255), 255, cv2.THRESH_BINARY)
     thr_img = cvx.morph_op(thr_img, 
         erosion_ksize=None, dilation_ksize=dilation_ksize)
+
+    return thr_img
+
+def mark(img, dilation_ksize=31, frac=0.9, color=(0, 0, 255)):
+    """
+    Marks whitest areas on image.
+    """
+    thr_img = mask(img, dilation_ksize, frac)
     *__, stats, __ = cv2.connectedComponentsWithStats(thr_img)
 
     #drawing rectangles on salient areas
@@ -81,6 +103,43 @@ def gabor_kernel_view(kernel, size=100):
     Returns a visualization of the gabor kernel.
     """
     return cv2.resize(kernel, (size, size))
+
+def benchmark():
+    bm_img_filepath = oarg.Oarg("-b --bm-img", "", "path to benchmark image", 0) 
+    img_filepath = oarg.Oarg("-i --img", "", "path to image", 1) 
+    display = oarg.Oarg("-D --display", True, "display images")
+    hlp = oarg.Oarg("-h --help", False, "this help message")
+
+    oarg.parse(sys.argv)
+
+    #help message
+    if hlp.val:
+        oarg.describeArgs("options:", def_val=True)
+        exit()
+
+    #checking validity of args
+    if not img_filepath.found or not bm_img_filepath.found:
+        error("image file not found (use -h for help)")
+
+    bm_img = cv2.imread(bm_img_filepath.val, 0)
+    img = cv2.imread(img_filepath.val, 0)
+
+    #checking validity of image
+    if img is None or bm_img is None:
+        error("could not read image")
+
+    img = cv2.resize(img, bm_img.shape[::-1])
+    mask_img = img & bm_img
+
+    #displaying images if required
+    if display.val:
+        cvx.display(bm_img, "bm_img")
+        cvx.display(img, "img")
+        cvx.display(mask_img, "mask_img")
+        cv2.waitKey(0)
+
+    print("Intersection:", mask_img.any())
+    print("Intersection %:", mask_img.sum()/bm_img.sum())
 
 def gabor_test():
     #command-line arguments
@@ -173,13 +232,12 @@ def gabor_test():
 def im_test():
     #command-line arguments
     img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
-    pyr_lvl = oarg.Oarg("-p --pyr-lvl", 3, "levels for pyramid") 
+    pyr_lvls = oarg.Oarg("-p --pyr-lvls", 3, "levels for pyramid") 
     #must be comma-separated
     str_cs_ksizes= oarg.Oarg("-c --cs-ks", "3,7", 
         "center-surround kernel sizes") 
     #must be comma-separated
-    str_feats = oarg.Oarg("-f --features", 
-        "l1,l0,r,g,b,y,hor,ver,l_diag,r_diag", "features to use")
+    str_maps = oarg.Oarg("-m --maps", "col,cst,ort", "maps to use")
     max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
     max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
     blur_ksize = oarg.Oarg("-b --blur-ksize", 5, 
@@ -219,7 +277,7 @@ def im_test():
     #resizing image
     img = cvx.resize(img, max_w.val, max_h.val)
     #adapting image dimensions for proper pyramid up/downscaling
-    img = cvx.pyr_prepare(img, pyr_lvl.val)
+    img = cvx.pyr_prepare(img, pyr_lvls.val)
     #pre-processing image
     img = pre_proc(img, {"ksize": 2*(blur_ksize.val,)})
 
@@ -229,109 +287,141 @@ def im_test():
 
     #getting center-surround kernel sizes
     cs_ksizes = str_to_list(str_cs_ksizes.val, int)
+    maps = str_to_list(str_maps.val, str)
+
+    #getting file name without extension
+    f_name = ".".join(os.path.basename(img_file.val).split(".")[:-1])
+
+    imaps = {"col": None, "cst": None, "ort": None}
+    #color intensity map
+    if "col" in maps:
+        col_db, col_imap = im.color_map(img, 
+            pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
+            pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
+            norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+            debug=debug.val)
+        imaps["col"] = col_imap
+        if debug.val:
+            imaps["col_db"] = col_db
+    #contrast intensity map
+    if "cst" in maps:
+        cst_db, cst_imap = im.contrast_map(img, 
+            pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
+            pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
+            norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+            debug=debug.val)
+        imaps["cst"] = cst_imap
+        if debug.val:
+            imaps["cst_db"] = cst_db
+    #orientation intensity map
+    if "ort" in maps:
+        ort_db, ort_imap = im.orientation_map(img, 
+            pyr_lvls=pyr_lvls.val, pyr_w_f=PYR_W_F,
+            norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+            debug=debug.val)
+        imaps["ort"] = ort_imap
+        if debug.val:
+            imaps["ort_db"] = ort_db
+
+    #getting final saliency map
+    final_im = im.combine([imaps["col"], imaps["cst"], imaps["ort"]])
+    #getting saliency mask
+    final_im_mask = mask(final_im)
+
+    #saving final result
+    if save_dir.val:
+        for name, imap in imaps.items():
+            if imap is not None:
+                cvx.save(imap, "%s/%s_%s_map.png" % \
+                    (save_dir.val, f_name, name))
+        cvx.save(final_im, "%s/%s_final_map.png" % (save_dir.val, f_name))
+        cvx.save(final_im_mask, 
+            "%s/%s_final_map_mask.png" % (save_dir.val, f_name))
+
+    #displaying results if required
+    if display.val:
+        for name, imap in imaps.items():
+            if imap is not None:
+                cvx.display(imap, name)
+        cvx.display(final_im, "final im")
+        cvx.display(final_im_mask, "final im mask")
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+def feat_test():
+    #command-line arguments
+    img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
+    #must be comma-separated
+    str_feats = oarg.Oarg("-f --features", 
+        "l1,l0,r,g,b,y,hor,ver,l_diag,r_diag", "features to use")
+    max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
+    max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
+    blur_ksize = oarg.Oarg("-b --blur-ksize", 5, 
+        "gaussian kernel size for blur")
+    display = oarg.Oarg("-D --display", True, "display images")
+    list_fts = oarg.Oarg("-l --list-features", False, "list available features")
+    save_dir = oarg.Oarg("-s --save-dir", ".", "directory to save images")
+    hlp = oarg.Oarg("-h --help", False, "this help message")
+
+    #parsing args
+    oarg.parse(sys.argv, delim=":")
+
+    #help message
+    if hlp.val:
+        oarg.describeArgs("options:", def_val=True)
+        exit()
+
+    if list_fts.val:
+        print("features:", ", ".join(ft.get_available_features()))
+        exit()
+
+    #checking validity of args
+    if not img_file.found:
+        error("image file not found (use -h for help)")
+
+    img = cv2.imread(img_file.val)
+
+    #checking validity of image
+    if img is None:
+        error("could not read image")
+    if len(img.shape) < 3:
+        error("image must be colored")
+
+    print("on file %s" % img_file.val)
+
+    #resizing image
+    img = cvx.resize(img, max_w.val, max_h.val)
+    #pre-processing image
+    img = pre_proc(img, {"ksize": 2*(blur_ksize.val,)})
+
+    #getting center-surround kernel sizes
     feats = str_to_list(str_feats.val, str)
 
     #getting file name without extension
     f_name = ".".join(os.path.basename(img_file.val).split(".")[:-1])
 
-    #test area
-    #getting intensity maps
-    col = im.color_map(img, pyr_lvls=pyr_lvl.val)
-    ct = im.contrast_map(img, pyr_lvls=pyr_lvl.val)
-    ort = im.orientation_map(img, pyr_lvls=pyr_lvl.val)
-    #final imap without normalization
-    no_norm_im = im.combine((col, ct, ort))
+    #displaying original image
+    if display.val:
+        cvx.display(img, "original image", False)
+    #saving original image
+    if save_dir.val:
+        cvx.save(img, "%s/%s_original.png" % (save_dir.val, f_name))
 
-    #cvx.display(col, "Color intensity map")
-    #cvx.display(ct, "Contrast intensity map")
-    #cvx.display(ort, "Orientation intensity map")
-
-    #normalization of maps
-    __, col = im.normalize(col, method="cc", score_type="cmdrsqm", debug=True,
-        morph_op_args={"erosion_ksize": 5, "dilation_ksize": 21,
-            "opening": True})
-    __, ct = im.normalize(ct, method="cc", score_type="cmdrsqm", debug=True,
-        morph_op_args={"erosion_ksize": 5, "dilation_ksize": 21,
-            "opening": True})
-    __, ort = im.normalize(ort, method="cc", score_type="cmdrsqm", debug=True,
-        morph_op_args={"erosion_ksize": 5, "dilation_ksize": 21,
-            "opening": True})
-
-    #scaling images
-    col, ct, ort = [cvx.scale(x, 0, 100) for x in (col, ct, ort)]
-
-    cvx.display(col, "Color intensity map (normalized)")
-    cvx.display(ct, "Contrast intensity map (normalized)")
-    cvx.display(ort, "Orientation intensity map (normalized)")
-    
-    #intensity map with normalization
-    norm_im = im.combine((col, ct, ort))
-
-    cvx.display(no_norm_im, "Final intensity map")
-    cvx.display(norm_im, "Final intensity map (normalized)")
-
-    cv2.waitKey(0)
-
-    db_img = reduce(cvx.v_append, map(lambda x: cvx.scale(x, 0, 255), 
-        (col, ct, ort, no_norm_im, norm_im)))
-    cvx.save(db_img, "%s/%s_col_ct_ort_no-norm_norm.png" % \
-        (save_dir.val, f_name))
-
-    exit()
-
-    ims = []
-    norm_ims = []
-    #computing intensity maps
+    #computing features
     for feature in feats:
         print("\ton feature '%s' ..." % feature)
-        input_img = ft.get_feature(img, feature)
-        db_im, imap = im.intensity_map_(input_img, pyr_lvl.val, cs_ksizes,    
-            debug=debug.val)
-
-        #normalizing map
-        norm_db, norm_imap = im.normalize(imap, method="cc", 
-            morph_op_args={"erosion_ksize": 5, "dilation_ksize": 21,
-                "opening": True},
-            score_type="cmdrsqm",
-            debug=True)
+        feat_img = ft.get_feature(img, feature)
  
         #displaying images
         if display.val:
-            cvx.display(input_img, "input image %s" % feature)
-            cvx.display(imap, "intensity map %s" % feature)
-        if debug.val and display.val:
-            cvx.display(db_im, "intermediary intensity_map %s" % feature)
-            ctr_im, __, thr_im, __, score = norm_db
-            print("\t\timap norm weight: 1/%f = %f" % (score, 1/score))
-            cvx.display(ctr_im, "contrast for normed feature %s" % feature)
-            cvx.display(thr_im, "conn comps in normed feature %s" % feature)
-
-        #appending partial intensity map
-        ims.append(imap)
-        norm_ims.append(norm_imap)
-
+            cvx.display(feat_img, "feature %s" % feature)
         #saving images
         if save_dir.val:
-            cvx.save(imap, "%s/%s_%s_map.png" % (save_dir.val, f_name, feature))
-            if debug.val:
-                cvx.save(db_im, "%s/%s_%s_db_map.png" % \
-                    (save_dir.val, f_name, feature))
+            cvx.save(feat_img, "%s/%s_%s.png" % (save_dir.val, f_name, feature))
 
-    #computing final intensity map
-    final_im = im.combine(ims)
-    final_im_norm = im.combine(norm_ims)
-
-    #displaying final result
     if display.val:
-        cvx.display(final_im, "final intensity map")
-        cvx.display(final_im_norm, "final intensity map normalized")
-        cvx.display(mark(final_im_norm), "selected regions", False)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-
-    #saving final result
-    if save_dir.val:
-        cvx.save(final_im_norm, "%s/%s_final_map.png" % (save_dir.val, f_name))
 
 def main():
     if len(sys.argv) < 2:
@@ -341,10 +431,18 @@ def main():
     test = sys.argv[1]
     sys.argv = sys.argv[2:]
 
+    #intensity maps test
     if test == "im":
         im_test()
+    #gabor filter test
     elif test == "gabor":
         gabor_test()
+    #features test
+    elif test == "feat":
+        feat_test()
+    #comparison between model-made mask and benchmark mask
+    elif test == "bm":
+        benchmark()
     else:
         print("unknown test '%s' (use %s)" %\
              (test, " or ".join(("im", "gabor"))))

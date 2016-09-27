@@ -7,7 +7,7 @@ import cv2
 import cvx
 import feat
 import numpy as np
-from itertools import combinations
+from itertools import combinations_with_replacement
 from functools import reduce
 
 def _id(x):
@@ -41,7 +41,8 @@ def _dists(points, dist_f=_euclid_dist):
     """!
     Computes the distances of a set of points.
     """
-    return map(lambda vecs: dist_f(*vecs), combinations(points, 2))
+    return map(lambda vecs: dist_f(*vecs), 
+        combinations_with_replacement(points, 2))
 
 def _cc(img, conn=8, dtype=cv2.CV_16U):
     """!
@@ -62,7 +63,7 @@ def _frac_threshold(img, max_frac=0.75):
 
 def _otsu_threshold(img):
     """!
-    Adaptative Otshu threshold.
+    Adaptative Otsu threshold.
     """
     return cv2.threshold(img, 0, 255, cv2.THRESH_OTSU)[1]
 
@@ -99,284 +100,15 @@ CONTRAST_FUNCS = {
 
 def _one(x):
     """!
-    Default weight function intensity_map.
-
-    @param x Input numeric value.
+    Default weight function.
     """
     return 1.0
 
-def get_center_surround_kernel(size, dtype=np.float32):
+def _inv(x):
     """!
-    Gets kernel to be used in convolution to perform center-surround
-    operation on image.
-
-    @param size Size of kernel.
-    @param dtype Type of returned kernel.
+    Inverse of x + 1.
     """
-    size = int(size)
-
-    #checking validity of arguments
-    if _is_even(size):
-        raise InvalidDimensions("kernel size must be odd")
-    if size < 2:
-        raise InvalidDimensions("kernel size must be bigger than 1")
-    if dtype != np.float32 and dtype != np.float64:
-        raise InvalidDataType("kernel dtpe must be either float32 or float64")
-
-    #creating kernel
-    weight = -1.0/(size**2 - 1)
-    kernel = weight*np.ones(dtype=dtype, shape=(size, size))
-    kernel[size//2, size//2] = 1.0
-
-    return kernel
-
-def center_surround(img, kernel, clip=True):
-    """!
-    Performs center-surround operation on image with given kernel.
-    Assumes image is one-dimensional.
-
-    @param img Input image.
-    @param kernel Center-surround kernel to apply to image.
-    @param clip If True, clip result for positive values only.
-    """
-    #checking validity of image dimensions
-    if len(img.shape) > 2:
-        raise InvalidDimensions("image must have depth one")
-
-    #applying operation through image
-    ddepth = cv2.CV_32F if kernel.dtype == np.float32 else cv2.CV_64F
-    cs_img = cv2.filter2D(img, ddepth, kernel)
-
-    return cs_img.clip(min=0.0) if clip else cs_img
-
-def intensity_map_(img, pyr_lvls=3, cs_ksizes=(3, 7), weight_f=lambda x, y: 1.0,
-    dtype=np.float32, debug=False):
-    """!
-    Gets intensity map by by summing up center_surround on
-    multiple scales and kernel sizes.
-    Assumes image is one-dimensional.
-    The resultant intensity map is a linear combination of the intermediary
-    maps.
-
-    @param img Input image.
-    @param pyr_lvls Pyramids levels to calculate.
-    @param cs_ksizes Center-surround kernel sizes.
-    @param weight_f Function to compute weight of map from pyramid level and
-        center-surround kernel size.
-    @param dtype Type of output image.
-    @param debug If True, returns intermediary intendity maps.
-    """
-    #getting all kernels
-    cs_kernels = [get_center_surround_kernel(ks, dtype) for ks in cs_ksizes]
-    #initial value for intensity map
-    im_img = np.zeros(dtype=dtype, shape=img.shape)
-    #debug image
-    debug_img = None
-
-    #iterating over pyramid levels (from 0 to pyr_lvls)
-    for i in range(pyr_lvls+1):
-        #getting downsampled image
-        img = cv2.pyrDown(img) if i > 0 else img
-        #partial debug image
-        db_img = None
-
-        for ki, k in enumerate(cs_kernels):
-            #getting center-surround image 
-            cs_img = center_surround(img, weight_f(i, ki)*k)
-            #updating debug partial image
-            if debug:
-                db_img = cs_img if db_img is None else \
-                    cvx.h_append(db_img, cs_img)
-            #rescaling into original image dimensions
-            cs_img = cvx.rep_pyrUp(cs_img, i)
-            #updating debug partial image
-            if debug and i > 0:
-                db_img = cvx.h_append(db_img, cs_img)
-            #summing contribution
-            im_img += cs_img
-    
-        #updating debug image
-        if debug:
-            debug_img = db_img if debug_img is None else \
-                cvx.v_append(debug_img, db_img) 
-
-    return debug_img, im_img
-
-def _pyr_op(img, op_f, pyr_lvls=3, weight_f=_one, debug=False):
-    """!
-    Iterator that ppplies operation on different levels of pyramid of image.
-
-    @param img Input image.
-    @param op_f Operation to apply
-    @param pyr_lvls Pyramids levels to calculate. The original image is 0 level.
-    @param weight_f Function to compute weight of map from pyramid level.
-    @param debug If True, yields intermediary images.
-    """
-    #iterating over pyramid levels (from 0 to pyr_lvls)
-    for i in range(pyr_lvls+1):
-        #getting downsampled image
-        img = cv2.pyrDown(img) if i > 0 else img
-        #applying operation
-        ds_op_img = op_f(img)
-        #upsampling image again
-        us_op_img = cvx.rep_pyrUp(ds_op_img, i)
-
-        yield (ds_op_img if debug else None), us_op_img
-
-def _pyr_op_sum(img, op_f, pyr_lvls=3, weight_f=_one, debug=False,
-    prepare=True):
-    """!
-    Sums up results from operations on various levels of pyramid.
-    See #_pyr_op.
-
-    @param img Input Image.
-    @param op_f Operation to apply.
-    @param pyr_lvls Pyramid levels.
-    @param weight_f Weight function for pyramid level.
-    @param debug If True, returns intermediary images.
-    """
-    #set suitable dimensions for pyramid if needed
-    if prepare:
-        img = cvx.pyr_prepare(img, pyr_lvls)
-
-    #getting generator
-    pyr_op_iter = _pyr_op(img, op_f, pyr_lvls, weight_f, debug)
-
-    if debug:
-        #building debug image
-        db_img = np.zeros(shape=(1, img.shape[1]), dtype=img.dtype)
-        db_imgs, imgs = zip(*pyr_op_iter)
-        db_imgs = map(lambda xy: cvx.h_append(xy[0], xy[1]), zip(db_imgs, imgs))
-        db_imgs = reduce(cvx.v_append, db_imgs, db_img)
-
-        return db_imgs, sum(imgs)
-    else:
-        return None, sum(_img for __, _img in pyr_op_iter)
-
-def _cs_op(img, ksizes=(3, 7), weight_f=_one, dtype=np.float32):
-    """!
-    Generator that appplies center surround with different kernels on image.
-
-    @param img Input image.
-    @param ksizes Kernel sizes.
-    @param weight_f Function to compute weight of map from kernel size.
-    @param dtype Output data type.
-    """
-    #iterating over kernel sizes
-    for ks in ksizes:
-        #getting kernel
-        kernel = get_center_surround_kernel(ks, dtype)
-        #applying operation
-        cs_img = center_surround(img, weight_f(ks)*kernel)
-
-        yield cs_img
-
-def _cs_op_sum(img, ksizes=(3, 7), weight_f=_one, dtype=np.float32):
-    """!
-    Sums up results from #_cs_op.
-    
-    @param img Input image.
-    @param weight_f Function to compute weight of map from kernel size.
-    @param debug If True, yields intermediary images.
-    """
-    return sum(_cs_op(img, ksizes, weight_f, dtype))
-
-def _rep_center_surround(img, pyr_lvls=3, cs_ksizes=(3, 7), 
-    pyr_w_f=_one, cs_w_f=_one,
-    dtype=np.float32, debug=False):
-    """!
-    Gets intensity map by by summing up center_surround on
-    multiple scales and kernel sizes.
-    Assumes image is one-dimensional.
-    The resultant intensity map is a linear combination of the intermediary
-    maps.
-
-    @param img Input image.
-    @param pyr_lvls Pyramids levels to calculate.
-    @param cs_ksizes Center-surround kernel sizes.
-    @param pyr_w_f Function to compute weight of map from pyramid level.
-    @param cs_w_f Function to compute weight of map from center surround ksize.
-    @param dtype Type of output image.
-    @param debug If True, returns intermediary intensity maps.
-    """
-    #center surround function to apply
-    cs_f = lambda _img: _cs_op_sum(_img, cs_ksizes, cs_w_f, dtype=dtype)
-
-    #applying center surround of all kernel sizes to all levels
-    db_imgs, imgs = _pyr_op_sum(img, cs_f, pyr_lvls, pyr_w_f, debug=debug)
-
-    return db_imgs, imgs
-
-def lab_attr_imap(img, pyr_lvls=3, cs_ksizes=(3, 7), 
-    pyr_w_f=_one, cs_w_f=_one,
-    dtype=np.float32, debug=False):
-    """!
-    Gets intensity map of color/intensity feature.
-    
-    @param img Input image.
-    @param pyr_lvls Pyramid levels.
-    @param cs_ksizes Center-surround kernel sizes.
-    @param pyr_w_f Weight function for pyramid level.
-    @param cs_w_f Weight function for center-surround kernel size.
-    @param dtype Data output type.
-    @param debug If True, return intermediary images.
-    """
-    return _rep_center_surround(img, pyr_lvls, cs_ksizes,
-        pyr_w_f, cs_w_f, dtype, debug)
-
-def single_orientation_imap(img, orientation, pyr_lvls=3, pyr_w_f=_one, 
-    dtype=np.float32, debug=False, **kwargs):
-    """!
-    Gets intensity map of orientation feature.
-    
-    @param img Input image.
-    @param orientation Orientation to compute intensity. 
-    @param pyr_lvls Pyramid levels.
-    @param cs_ksizes Center-surround kernel sizes.
-    """
-
-    or_f = lambda _img: feat.get_orientation_map(_img, orientation, **kwargs)
-
-    return _pyr_op_sum(img, or_f, pyr_lvls, pyr_w_f, dtype, debug) 
-
-def color_map(img, **kwargs):
-    """!
-    Gets intensity map of all color features.
-    Assumes image comes in BGR.
-    
-    @param img Input image.
-    @param kwargs Additional parameters. See #lab_attr_imap.
-    """
-    ft_imgs = (feat.get_feature(img, ft) for ft in ["r", "g", "b", "y"])
-
-    return sum(lab_attr_imap(ft_img, **kwargs)[1] for ft_img in ft_imgs)
-
-def contrast_map(img, **kwargs):
-    """!
-    Gets intensity map of all contrast features.
-    Assumes image comes in BGR.
-    
-    @param img Input image.
-    @param kwargs Additional parameters. See #lab_attr_imap.
-    """
-    ft_imgs = (feat.get_feature(img, ft) for ft in ["l0", "l1"])
-
-    return sum(lab_attr_imap(ft_img, **kwargs)[1] for ft_img in ft_imgs)
-
-def orientation_map(img, **kwargs):
-    """!
-    Gets intensity map of all orientation features.
-    Assumes image comes in BGR.
-    
-    @param img Input image.
-    @param pyr_lvls Pyramid levels.
-    @param cs_ksizes Center-surround kernel sizes.
-    @param kwargs Additional parameters. See #single_orientation_imap.
-    """ 
-    orientations = list(feat.ORIENTATIONS.keys())
-
-    return sum(single_orientation_imap(img, ort, **kwargs)[1] \
-        for ort in orientations)
+    return 1/(x + 1)
 
 def _cc_cm_dists(cc_params):
     """!
@@ -522,12 +254,14 @@ def cc_norm(im,
     @param score_args Arguments for weight function.
     @param debug Returns intermediate images.
     """
+    #making functions to apply
     contrast_f = lambda x: CONTRAST_FUNCS[contrast_type](x, **contrast_args)
     thr_f = lambda x: THRESH_FUNCS[thr_type](x, **thr_args)
     cc_f = lambda x: _cc(x, **cc_args)
     morph_f = lambda x: cvx.morph_op(x, **morph_op_args)
     score_f = lambda x: CC_NORM_SCORE_FUNCS[score_type](x, **score_args)
 
+    #calling higher-order function
     return cc_norm_(im, contrast_f, thr_f, cc_f, morph_f, score_f, debug=debug)
 
 def frac_norm_(im, thr_f, debug=False):
@@ -536,7 +270,7 @@ def frac_norm_(im, thr_f, debug=False):
     
     @param im Input intensity map.
     @param thr_f Threshold function to apply.
-    @param debug Returns intermediate images.
+    @param debug Returns intermediate images if True.
     """
     #converting to uint8 if necessary
     if im.dtype != np.uint8:
@@ -591,12 +325,321 @@ def normalize(im, method="cc", **kwargs):
 
     return IM_NORM_FUNCS[method](im, **kwargs) 
 
-##Available linear combination functions for intensity maps.
-IM_COMBINE_FUNCS = {
-    "sum": sum
+def get_center_surround_kernel(size, dtype=np.float32):
+    """!
+    Gets kernel to be used in convolution to perform center-surround
+    operation on image.
+
+    @param size Size of kernel.
+    @param dtype Type of returned kernel.
+    """
+    size = int(size)
+
+    #checking validity of arguments
+    if _is_even(size):
+        raise InvalidDimensions("kernel size must be odd")
+    if size < 2:
+        raise InvalidDimensions("kernel size must be bigger than 1")
+    if dtype != np.float32 and dtype != np.float64:
+        raise InvalidDataType("kernel dtpe must be either float32 or float64")
+
+    #creating kernel
+    weight = -1.0/(size**2 - 1)
+    kernel = weight*np.ones(dtype=dtype, shape=(size, size))
+    kernel[size//2, size//2] = 1.0
+
+    return kernel
+
+def center_surround(img, kernel, clip=True):
+    """!
+    Performs center-surround operation on image with given kernel.
+    Assumes image is one-dimensional.
+
+    @param img Input image.
+    @param kernel Center-surround kernel to apply to image.
+    @param clip If True, clip result for positive values only.
+    """
+    #checking validity of image dimensions
+    if len(img.shape) > 2:
+        raise InvalidDimensions("image must have depth one")
+
+    #applying operation through image
+    ddepth = cv2.CV_32F if kernel.dtype == np.float32 else cv2.CV_64F
+    cs_img = cv2.filter2D(img, ddepth, kernel)
+
+    return cs_img.clip(min=0.0) if clip else cs_img
+
+def _debug_unpack(img, db_imgs_and_imgs_iter, line=False):
+    """!
+    Gets an iterable with values in format (debug_img, img) and builds a 
+    single debug image along with a single image.
+    """
+    #separating debug images and images
+    db_imgs, imgs = zip(*db_imgs_and_imgs_iter)
+    #appending all debug images together
+    db_imgs = map(lambda xy: cvx.h_append(xy[0], xy[1]), zip(db_imgs, imgs))
+    append = lambda x, y: cvx.v_append(x, y, put_line=line)
+    db_imgs = reduce(append, db_imgs)
+
+    return db_imgs, sum(imgs)
+
+def _pyr_op(img, op_f, pyr_lvls, weight_f=_one, debug=False):
+    """!
+    Iterator that applies operation on different levels of pyramid of image.
+
+    @param img Input image.
+    @param op_f Operation to apply.
+    @param pyr_lvls Pyramids levels to calculate. The original image is 0 level.
+    @param weight_f Function to compute weight of map from pyramid level.
+    @param debug If True, yields intermediary images.
+    """
+    #iterating over pyramid levels (from 0 to pyr_lvls)
+    for i in range(pyr_lvls+1):
+        #getting downsampled image
+        img = cv2.pyrDown(img) if i > 0 else img
+        #applying operation
+        ds_op_img = weight_f(i)*op_f(img)
+        #upsampling image again
+        us_op_img = cvx.rep_pyrUp(ds_op_img, i)
+
+        yield (ds_op_img if debug else None), us_op_img
+
+def _pyr_op_sum(img, op_f, pyr_lvls=3, weight_f=_one, debug=False,
+    prepare=True):
+    """!
+    Sums up results from operations on various levels of pyramid.
+    See #_pyr_op.
+    """
+    #set suitable dimensions for pyramid if needed
+    if prepare:
+        img = cvx.pyr_prepare(img, pyr_lvls)
+
+    #getting generator
+    pyr_op_iter = _pyr_op(img, op_f=op_f, pyr_lvls=pyr_lvls, weight_f=weight_f,
+        debug=debug)
+
+    if debug:
+        return _debug_unpack(img, pyr_op_iter)
+    else:
+        return None, sum(_img for __, _img in pyr_op_iter)
+
+def _cs_op(img, ksizes, weight_f=_one, dtype=np.float32):
+    """!
+    Generator that appplies center surround with different kernels on image.
+
+    @param img Input image.
+    @param ksizes Kernel sizes.
+    @param weight_f Function to compute weight of map from kernel size.
+    @param dtype Output data type.
+    """
+    #iterating over kernel sizes
+    for ks in ksizes:
+        #getting kernel
+        kernel = get_center_surround_kernel(ks, dtype)
+        #applying operation
+        cs_img = center_surround(img, weight_f(ks)*kernel)
+
+        yield cs_img
+
+def _cs_op_sum(img, ksizes=(3, 7), weight_f=_one, dtype=np.float32):
+    """!
+    Sums up results from #_cs_op.
+    """
+    return sum(_cs_op(img, ksizes, weight_f, dtype))
+
+def _lab_attr_map(img, 
+    pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one,
+    norm_method="cc", norm_params={},
+    dtype=np.float32, debug=False):
+    """!
+    Gets intensity map of LAB colorspace feature.
+    
+    @param img Input image.
+    @param pyr_lvls Pyramid levels.
+    @param cs_ksizes Center-surround kernel sizes.
+    @param pyr_w_f Weight function for pyramid level.
+    @param cs_w_f Weight function for center-surround kernel size.
+    @param dtype Data output type.
+    @param debug If True, return intermediary images.
+    """
+    #center surround function to apply
+    cs_f = lambda x: _cs_op_sum(x, cs_ksizes, cs_w_f, dtype=dtype)
+    #applying center surround of all kernel sizes to all levels
+    db_im, im = _pyr_op_sum(img, op_f=cs_f, pyr_lvls=pyr_lvls, 
+        weight_f=pyr_w_f, debug=debug)
+
+    #normalizing map
+    db_norm_im, norm_im = normalize(im, method=norm_method, debug=debug, 
+        **norm_params)
+
+    #assembling debug image if required
+    if debug:
+        db_norm_im = [im] + db_norm_im[:-2]
+        db_norm_im = reduce(cvx.h_append, 
+            map(lambda x: db_im.max()*cvx.normalize(x), db_norm_im))
+        db_im = cvx.v_append(db_im, db_norm_im)
+
+    return db_im, norm_im
+
+def _lab_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one, 
+    feats=list(feat.LAB_ATTR_FUNCS.keys()), 
+    norm_method="cc", norm_params={},
+    dtype=np.float32, debug=False):
+    """!
+    Gets intensity map of a subset of LAB colorspace features.
+    Assumes image comes in BGR.
+
+    @param img Input image.
+    @param pyr_lvls Pyramid levels.
+    @param cs_ksizes Center-surround kernel sizes.
+    @param pyr_w_f Weight function for pyramid level.
+    @param cs_w_f Weight function for center-surround kernel size.
+    @param feats LAB features to use. See #feat.LAB_ATTR_FUNCS.
+    @param norm_method Method for maps normalization. See #IM_NORM_FUNCS.
+    @param norm_params Additional normalization parameters.
+    @param dtype Data output type.
+    @param debug If True, return intermediary images.
+    """
+    #getting maps
+    feat_iter = (feat.get_lab_attr_map(img, attr=ft, cvt=True) \
+        for ft in feats)
+
+    #getting center-surround on multiple kernel sizes and multiple pyramid
+    #levels for each map
+    pyr_w_f(1)
+    map_iter = (_lab_attr_map(_img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
+        norm_method=norm_method, norm_params=norm_params,
+        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f, dtype=dtype, debug=debug) \
+        for _img in feat_iter)
+
+    if debug:
+        return _debug_unpack(img, map_iter, line=True)
+    else:
+        return None, sum(_img for __, _img in map_iter)
+
+def color_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one, 
+    norm_method="cc", norm_params={},
+    colors=feat.LAB_COLORS, dtype=np.float32, debug=False):
+    """!
+    Computes color intensity map. See #_lab_map.
+    Assumes image comes in BGR.
+    
+    @param colors Colors to use in map calculation.
+    """
+    return _lab_map(img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes, 
+        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f, 
+        norm_method=norm_method, norm_params=norm_params,
+        feats=colors, dtype=dtype, debug=debug)
+
+def contrast_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one, 
+    norm_method="cc", norm_params={},
+    colors=feat.LAB_CONTRASTS, dtype=np.float32, debug=False):
+    """!
+    Computes contrast intensity map. See #_lab_map.
+    Assumes image comes in BGR.
+    
+    @param colors Intensities to use in map calculation.
+    """
+    return _lab_map(img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes, 
+        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f, 
+        norm_method=norm_method, norm_params=norm_params,
+        feats=colors, dtype=dtype, debug=debug)
+
+def _single_orientation_map(img, orientation, pyr_lvls=3, pyr_w_f=_one, 
+    norm_method="cc", norm_params={},
+    dtype=np.float32, debug=False, **kwargs):
+    """!
+    Gets intensity map of orientation feature.
+    
+    @param img Input image.
+    @param orientation Orientation to compute intensity. 
+    @param pyr_lvls Pyramid levels.
+    @param pyr_w_f Pyramid weight function.
+    @param norm_method Normalization method.
+    @param norm_params Additional normalization parameters.
+    @param dtype Data type. 
+    @param debug If True, returns intermediary images.
+    @param kwargs Additional parameters for feat.get_orientation_map.
+    """
+    #getting orientation map
+    or_f = lambda _img: feat.get_orientation_map(_img, orientation, **kwargs)
+    db_im, im = _pyr_op_sum(img, or_f, pyr_lvls, pyr_w_f, dtype, debug) 
+    
+    #normalizing
+    db_norm_im, norm_im = normalize(im, method=norm_method, debug=debug,
+        **norm_params)
+
+    #assembling debug image if required
+    if debug:
+        db_norm_im = [im] + db_norm_im[:-2]
+        db_norm_im = reduce(cvx.h_append, 
+            map(lambda x: db_im.max()*cvx.normalize(x), db_norm_im))
+        db_im = cvx.v_append(db_im, db_norm_im)
+
+    return db_im, norm_im
+
+def orientation_map(img, orientations=list(feat.ORIENTATIONS.keys()),
+    norm_method="cc", norm_params={},
+    pyr_lvls=3, pyr_w_f=_one, dtype=np.float32, debug=False, **kwargs):
+    """!
+    Gets intensity map of all orientation features.
+    Assumes image comes in BGR.
+    
+    @param img Input image.
+    @param orientations Orientations list.
+    @param norm_method Normalization method.
+    @param norm_params Additional normalization parameters.
+    @param pyr_lvls Pyramid levels.
+    @param dtype Data type.
+    @param debug If True, returns intermediary images.
+    @param kwargs Additional parameters for #_single_orientation_map.
+    """ 
+    #all maps iterator
+    map_iter = (_single_orientation_map(img, ort, pyr_lvls=pyr_lvls, 
+        norm_method=norm_method, norm_params=norm_params,
+        pyr_w_f=pyr_w_f, dtype=dtype, debug=debug, **kwargs) \
+        for ort in orientations)
+
+    #combining result
+    if debug:
+        return _debug_unpack(img, map_iter, line=True)
+    else:
+        return sum(_img for __, _img in map_iter)
+
+##Available saliency map functions.
+MAP_FUNCTIONS = {
+    "col": color_map,
+    "cst": contrast_map,
+    "ort": orientation_map,
 }
 
-def combine(ims, method="sum"):
+def weighted_sum(maps):
+    """!
+    Performs a weighted sum of maps to produce final saliency map. 
+    The weight of each map is 1/n, where n is the number of features in map.
+
+    @param maps Intensity maps in format (color, contrast, orientation).
+    """
+    color_map, contrast_map, orientation_map = maps
+
+    imap = np.zeros(shape=color_map.shape, dtype=color_map.dtype)
+
+    if color_map is not None:
+        imap += color_map/4
+    if contrast_map is not None:
+        imap += contrast_map/2
+    if orientation_map is not None:
+        imap += orientation_map/4
+
+    return imap
+
+##Available linear combination functions for intensity maps.
+IM_COMBINE_FUNCS = {
+    "sum": sum,
+    "wsum": weighted_sum
+}
+
+def combine(maps, method="wsum"):
     """!
     Returns linear combination of sum of intensity maps.
 
@@ -605,4 +648,4 @@ def combine(ims, method="sum"):
     """
     method = method.lower()
 
-    return IM_COMBINE_FUNCS[method](ims)
+    return IM_COMBINE_FUNCS[method](maps)

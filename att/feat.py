@@ -24,6 +24,18 @@ LAB_ATTR_FUNCS = {
     "b": lambda x: cvx.inv(LAB_ATTR_FUNCS["y"](x))
 }
 
+LAB_COLORS = [
+    "r",
+    "g",
+    "b",
+    "y"
+]
+
+LAB_CONTRASTS = [
+    "l0",
+    "l1"
+]
+
 ##Default values for gabor kernel.
 DEF_GABOR_K_PARAMS = {
     #kernel size
@@ -60,7 +72,7 @@ def get_available_features():
     """
     return list(LAB_ATTR_FUNCS.keys()) + list(ORIENTATIONS.keys())
 
-def get_lab_attr(img, attr, cvt=True):
+def get_lab_attr_map(img, attr, cvt=True):
     """!
     Gets feature calculable from Lab image.
     Assumes img is either in Lab or in BGR.
@@ -115,7 +127,7 @@ def gabor_filter(img, kernel_params={}, cvt=True, clip=True):
 
     return img.clip(min=0.0) if clip else img
 
-def get_orientation_map(img, orientation, gabor_kernel_params={}, 
+def get_orientation_map(img, orientation="", gabor_kernel_params={}, 
     cvt=True, clip=True):
     """!
     Gets orientation map in some of the directions.
@@ -128,8 +140,9 @@ def get_orientation_map(img, orientation, gabor_kernel_params={},
     @param clip It True, clip result for positive values only.
     """
     #getting available directions
-    rad_orientation = ORIENTATIONS[orientation]
-    gabor_kernel_params.update({"theta": rad_orientation})
+    if orientation:
+        rad_orientation = ORIENTATIONS[orientation]
+        gabor_kernel_params.update({"theta": rad_orientation})
 
     return gabor_filter(img, gabor_kernel_params, cvt, clip)
 
@@ -146,7 +159,7 @@ def get_feature(img, feat, **kwargs):
     feat = feat.lower()
 
     if feat in LAB_ATTR_FUNCS:
-        return get_lab_attr(img, attr=feat, **kwargs)
+        return get_lab_attr_map(img, attr=feat, **kwargs)
     elif feat in ORIENTATIONS:
         return get_orientation_map(img, orientation=feat, **kwargs)
 
