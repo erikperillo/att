@@ -15,11 +15,11 @@ bm_masks_ext=".png"
 #command to execute benchmark in format: $cmd <bm_img> <img>
 bm_cmd="./test.py bm"
 #number of random images to take from source images dir
-sample=1000
+sample=10
 #directory where everything will be stored.
 #if gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
-main_dir=~/ecssd_bm2
+main_dir=~/ecssd_bm3
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd_dir=/home/erik/proj/att/att
 att_cmd="./test.py im"
