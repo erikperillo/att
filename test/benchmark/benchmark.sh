@@ -1,108 +1,147 @@
 #!/bin/bash
-#benchmark of images. assumes they all have the same filenames.
+#benchmark of images. 
+#assumes all types (stimuli, ground-truth map/binary-mask have the same 
+#filenames, except for possibly different extensions.
 
-#source images directory
-#bm_imgs_dir=~/proj/ic/saliency_benchmarks/bms/cssd/images
-#bm_imgs_dir=~/proj/ic/saliency_benchmarks/bms/ecssd/images
-bm_imgs_dir=~/proj/ic/saliency_benchmarks/bms/mit_300/BenchmarkIMAGES/BenchmarkIMAGES/SM
-#bm_imgs_dir=~/proj/att/test/imgs
-#source images extension
-bm_imgs_ext=".jpg"
-#benchmarks mask images directory
-bm_masks_dir=~/proj/ic/saliency_benchmarks/ecssd/ground_truth_mask
-#mask images extension
-bm_masks_ext=".png"
-#command to execute benchmark in format: $cmd <bm_img> <img>
-bm_cmd="./test.py bm"
-#number of random images to take from source images dir
-sample=300
 #directory where everything will be stored.
-#if gen_data is not called, assumes main_dir still has the structure
+#if function gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
-main_dir=~/mit_300
-#command to run model on single image. format: $cmd <img> [flags]
-att_cmd_dir=/home/erik/proj/att/att
-att_cmd="./test.py im"
-att_cmd_flags="-D -s $main_dir/results -m col,cst"
-#command to run benchmark on pair of benchmark mask and image. 
-#format: $cmd <mask_bm_img> <img> [flags] <mask_img>
-bm_cmd_dir=/home/erik/proj/att/att
-bm_cmd="./test.py bm"
-bm_cmd_flags="-D -M -m"
-#result images format
-#map_ext="_final_map.png"
-map_ext="_final_map.png"
-map_mask_ext="_final_map_mask.png"
-#result file
-bm_file=$main_dir/benchmark.txt
-#stats calculating script
-stats_cmd=/home/erik/proj/att/test/benchmark/bm_stats.py
-stats_file=$main_dir/stats.txt
+main_dir="/home/erik/mit_300"
+#directories for each type of image
+gt_masks_dir="$main_dir/masks"
+gt_points_dir="$main_dir/points"
+gt_maps_dir="$main_dir/gt_maps"
+maps_dir="$main_dir/maps"
+stimuli_dir="$main_dir/stimuli"
 
+#source original images directory
+src_stimuli_dir="/home/erik/proj/ic/saliency_benchmarks/bms/cssd/images"
+#source stimuli extension
+stimuli_ext=".jpg"
+#use ground-truth masks
+use_gt_masks=true
+#ground truth masks directory
+src_gt_masks_dir="/home/erik/proj/ic/saliency_benchmarks/bms/cssd/ground_truth_mask"
+#ground truth masks extension
+gt_masks_ext=".png"
+#use ground-truth points
+use_gt_points=false
+#ground truth points directory
+src_gt_points_dir="/home/erik/proj/ic/saliency_benchmarks/bms/mit_300/BenchmarkIMAGES/"
+#ground truth points extension
+gt_points_ext=".jpg"
+#use ground-truth maps
+use_gt_maps=false
+#ground truth maps directory
+src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/mit_300/BenchmarkIMAGES/"
+#ground truth maps extension
+gt_maps_ext=".jpg"
+
+#number of random images to take from source images dir
+sample=2
+
+#command to run model on single image. format: $cmd <img> [flags]
+att_cmd="/home/erik/proj/att/att/test.py im"
+att_cmd_flags="-D -s $maps_dir -m col,cst"
+
+#command to execute some benchmark metric in format $bm <map> [...]
+bm_cmd="/home/erik/proj/att/test/benchmark/metrics.py"
+bm_cmd_flags=""
+
+#result images format
+map_ext="_final_map.png"
+
+#result file
+bm_file="$main_dir/benchmark.txt"
+
+#stats calculating script
+stats_cmd="/home/erik/proj/att/test/benchmark/bm_stats.py"
+stats_file="$main_dir/stats.txt"
+
+#gets only filename of path, without extension. 
+#ex: /home/foo/bar.jpg -> bar
 fname()
 {
 	echo $(basename $1) | rev | cut -f1 -d. --complement | rev
 }
 
+#creates directory, exitting in case of any error
 mkdir_check()
 {
-	mkdir -- $1 || { echo "could not create $1"; exit 1; }
+	mkdir -- $1 || { echo "midir_check: could not create $1"; exit 1; }
 }
 
+#generates data
 gen_data()
 {
-	mkdir_check $main_dir
-	mkdir_check $main_dir/imgs
-	mkdir_check $main_dir/masks
-	mkdir_check $main_dir/results
+	#creating directories
+	mkdir_check "$main_dir"
+	for d in "$gt_masks_dir" "$gt_points_dir" "$gt_maps_dir" "$maps_dir" \
+		"$stimuli_dir"; do
+		mkdir_check "$d"
+	done
 
 	#getting images
-	cd $bm_imgs_dir
-	cp -- $(ls | shuf | head -n $sample) $main_dir/imgs
-	cd - > /dev/null
+	cp -- $(ls "$src_stimuli_dir"/* | shuf | head -n $sample) "$stimuli_dir"
 
-	#getting masks
-	for f in $main_dir/imgs/*; do
-		cp -- $bm_masks_dir/$(fname $f)$bm_masks_ext $main_dir/masks
-	done
+	#getting ground-truth masks
+	if "$use_gt_masks"; then
+		for f in "$stimuli_dir"/*; do
+			cp -- "$src_gt_masks_dir/$(fname $f)$gt_masks_ext" "$gt_masks_dir"
+		done
+	fi
+	#getting ground-truth points
+	if "$use_gt_points"; then
+		for f in "$stimuli_dir/"*; do
+			cp -- "$src_gt_points_dir/$(fname $f)$gt_points_ext" "$points_dir"
+		done
+	fi
+	#getting ground-truth maps
+	if "$use_gt_maps"; then
+		for f in "$stimuli_dir/"*; do
+			cp -- "$src_gt_maps_dir/$(fname $f)$gt_maps_ext" "$maps_dir"
+		done
+	fi
 }
 
+#runs model on each source image
 run()
 {
-	cd $att_cmd_dir
-
-	for f in $main_dir/imgs/*; do
+	for f in "$stimuli_dir"/*; do
 		#echo "in $f..."
-		time $att_cmd $f $att_cmd_flags
+		time $att_cmd "$f" $att_cmd_flags
 		echo
 	done	
 }
 
 bm()
 {
-	cd $bm_cmd_dir
+	for st in "$stimuli_dir"/*; do
+		map="$maps_dir/$(fname $st)$map_ext"
+		gt_mask="$gt_masks_dir/$(fname $st)$gt_masks_ext"
+		gt_map="$gt_maps_dir/$(fname $st)$gt_maps_ext"
+		gt_points="$gt_points_dir/$(fname $st)$gt_points_ext"
+		echo "in $map..."
 
-	for bm_f in $main_dir/masks/*; do
-		f=$main_dir/results/$(fname $bm_f)$map_ext
-		mask_f=$main_dir/results/$(fname $bm_f)$map_mask_ext
-		if [ -f "$f" ]; then
-			echo "comparing $bm_f and $f"
-			$bm_cmd $bm_f $f $bm_cmd_flags $mask_f
-			echo
-		fi
+		printf "mae: "; $bm_cmd "mae" "$map" "$gt_mask" $bm_cmd_flags
+		printf "auc_judd: "; $bm_cmd "auc_judd" "$map" "$gt_mask" $bm_cmd_flags
+		echo
 	done
 }
 
 main()
 {
-	#echo "generating data..."
+	echo "generating data..."
 	gen_data
+	echo "done."
 
-	#echo "running model..."
+	echo "running model..."
 	run 2>&1 | tee -a $bm_file
+	echo "done."
 
 	echo "executing benchmark..."
 	bm 2>&1 | tee -a $bm_file
+	exit 1
 
 	#echo "copying generator script to benchmark dir..."
 	cp -- "$0" $main_dir/gen_script.sh

@@ -1,8 +1,10 @@
 *.pyc
 *.png
+*.jpg
 *.swp
 *.swo
 __pycache__/
 att/cvx.py
 doc/*
+!test/imgs
 !doc/Doxyfile

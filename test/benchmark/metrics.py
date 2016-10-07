@@ -4,6 +4,7 @@ import scipy.io as sio
 import numpy as np
 import subprocess as sp
 import os.path as op
+import sys
 import cv2
 
 AUC_JUDD_SRC = "AUC_Judd.m"
@@ -41,8 +42,11 @@ def load_and_fit_dims(img_filepath_1, img_filepath_2,
 def auc_judd(map_filepath, pts_filepath, jitter=1, to_plot=0):
     cmd = "; ".join([
         "addpath('{}')",
+        "pkg load image",
         "map = double(imread('{}'))",
         "pts = double(imread('{}'))",
+        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
+        "if size(size(pts), 2) > 2 pts = rgb2gray(pts); end",
         "[score, tp, fp, treshs] = AUC_Judd(map, pts>0, {}, {})",
         "score"
         ]).format(op.dirname(AUC_JUDD_SRC),
@@ -50,7 +54,7 @@ def auc_judd(map_filepath, pts_filepath, jitter=1, to_plot=0):
             pts_filepath,
             jitter, to_plot)
 
-    print("executing command '%s'" % cmd)
+    #print("executing command '%s'" % cmd)
     score = float(matlab_cmd(cmd))
 
     return score
@@ -59,9 +63,13 @@ def auc_shuffled(map_filepath, pts_filepath, other_pts_filepath,
     n_splits=100, step_size=0.1, to_plot=0):
     cmd = "; ".join([
         "addpath('{}')",
+        "pkg load image",
         "map = double(imread('{}'))",
         "pts = double(imread('{}'))",
         "other_pts = double(imread('{}'))",
+        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
+        "if size(size(pts), 2) > 2 pts = rgb2gray(pts); end",
+        "if size(size(other_pts)) > 2 other_pts = rgb2gray(other_pts); end",
         "[score, tp, fp] = AUC_shuffled(map, pts>0, other_pts>0, {}, {}, {})",
         "score"
         ]).format(op.dirname(AUC_SHUFFLED_SRC),
@@ -70,7 +78,7 @@ def auc_shuffled(map_filepath, pts_filepath, other_pts_filepath,
             other_pts_filepath,
             n_splits, step_size, to_plot)
 
-    print("executing command '%s'" % cmd)
+    #print("executing command '%s'" % cmd)
     score = float(matlab_cmd(cmd))
 
     return score
@@ -81,13 +89,15 @@ def nss2(map_filepath, pts_filepath):
         "pkg load image",
         "map = double(imread('{}'))",
         "pts = double(imread('{}'))",
+        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
+        "if size(size(pts), 2) > 2 pts = rgb2gray(pts); end",
         "score = NSS(map, pts>0)",
         "score"
         ]).format(op.dirname(AUC_JUDD_SRC),
             map_filepath, 
             pts_filepath)
 
-    print("executing command '%s'" % cmd)
+    #print("executing command '%s'" % cmd)
     score = float(matlab_cmd(cmd))
 
     return score
@@ -110,13 +120,15 @@ def cc2(map_filepath, gt_map_filepath):
         "pkg load image",
         "map = double(imread('{}'))",
         "gt_map = double(imread('{}'))",
+        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
+        "if size(size(gt_map), 2) > 2 gt_map = rgb2gray(gt_map); end",
         "score = CC(map, gt_map)",
         "score"
         ]).format(op.dirname(CC_SRC),
             map_filepath, 
             gt_map_filepath)
 
-    print("executing command '%s'" % cmd)
+    #print("executing command '%s'" % cmd)
     score = float(matlab_cmd(cmd))
 
     return score
@@ -139,6 +151,8 @@ def sim2(map_filepath, gt_map_filepath, to_plot=0):
         "pkg load image",
         "map = double(imread('{}'))",
         "gt_map = double(imread('{}'))",
+        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
+        "if size(size(gt_map), 2) > 2 gt_map = rgb2gray(gt_map); end",
         "score = similarity(map, gt_map, {})",
         "score"
         ]).format(op.dirname(AUC_JUDD_SRC),
@@ -146,7 +160,7 @@ def sim2(map_filepath, gt_map_filepath, to_plot=0):
             gt_map_filepath,
             to_plot)
 
-    print("executing command '%s'" % cmd)
+    #print("executing command '%s'" % cmd)
     score = float(matlab_cmd(cmd))
 
     return score
@@ -181,7 +195,7 @@ def test():
     print()
 
     print("in auc_shuffled...")
-    score = auc_shuffled("map.jpg", "pts.jpg", "../code_forMetrics/other_pts.jpg")
+    score = auc_shuffled("map.jpg", "pts.jpg", "other_pts.jpg")
     print("done. score =", score)
     print()
 
@@ -220,8 +234,29 @@ def test():
     print("done. score =", score)
     print()
 
+#metrics to use
+METRICS_FUNCS = {
+    "auc_judd": auc_judd,
+    "auc_shuffled": auc_shuffled,
+    "nss": nss,
+    "mae": mae,
+    "cc": cc,
+    "sim": sim
+}
+
+def compute():
+    if len(sys.argv) < 2:
+        print("usage: metrics.py <metric> <map> [other_args]")
+        exit()
+
+    #executing metric
+    metric = sys.argv[1] 
+    score = METRICS_FUNCS[metric](*sys.argv[2:])
+    print(score)
+
 def main():
-    test()
+    #test()
+    compute()
 
 if __name__ == "__main__":
     main()
