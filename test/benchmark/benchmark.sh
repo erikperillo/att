@@ -2,9 +2,9 @@
 #benchmark of images. assumes they all have the same filenames.
 
 #source images directory
-#bm_imgs_dir=~/proj/ic/saliency_benchmarks/cssd/images
-bm_imgs_dir=~/proj/ic/saliency_benchmarks/ecssd/images
-#bm_imgs_dir=~/proj/ic/saliency_benchmarks/mit_300/BenchmarkIMAGES
+#bm_imgs_dir=~/proj/ic/saliency_benchmarks/bms/cssd/images
+#bm_imgs_dir=~/proj/ic/saliency_benchmarks/bms/ecssd/images
+bm_imgs_dir=~/proj/ic/saliency_benchmarks/bms/mit_300/BenchmarkIMAGES/BenchmarkIMAGES/SM
 #bm_imgs_dir=~/proj/att/test/imgs
 #source images extension
 bm_imgs_ext=".jpg"
@@ -15,15 +15,15 @@ bm_masks_ext=".png"
 #command to execute benchmark in format: $cmd <bm_img> <img>
 bm_cmd="./test.py bm"
 #number of random images to take from source images dir
-sample=10
+sample=300
 #directory where everything will be stored.
 #if gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
-main_dir=~/ecssd_bm3
+main_dir=~/mit_300
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd_dir=/home/erik/proj/att/att
 att_cmd="./test.py im"
-att_cmd_flags="-D -s $main_dir/results -m col,cst,ort"
+att_cmd_flags="-D -s $main_dir/results -m col,cst"
 #command to run benchmark on pair of benchmark mask and image. 
 #format: $cmd <mask_bm_img> <img> [flags] <mask_img>
 bm_cmd_dir=/home/erik/proj/att/att
@@ -36,7 +36,7 @@ map_mask_ext="_final_map_mask.png"
 #result file
 bm_file=$main_dir/benchmark.txt
 #stats calculating script
-stats_cmd=/home/erik/proj/att/att/bm_stats.py
+stats_cmd=/home/erik/proj/att/test/benchmark/bm_stats.py
 stats_file=$main_dir/stats.txt
 
 fname()
@@ -95,16 +95,16 @@ bm()
 
 main()
 {
-	echo "generating data..."
+	#echo "generating data..."
 	gen_data
 
-	echo "running model..."
+	#echo "running model..."
 	run 2>&1 | tee -a $bm_file
 
 	echo "executing benchmark..."
 	bm 2>&1 | tee -a $bm_file
 
-	echo "copying generator script to benchmark dir..."
+	#echo "copying generator script to benchmark dir..."
 	cp -- "$0" $main_dir/gen_script.sh
 
 	echo "getting some benchmark statistics..."
