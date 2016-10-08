@@ -3,42 +3,57 @@
 #assumes all types (stimuli, ground-truth map/binary-mask have the same 
 #filenames, except for possibly different extensions.
 
+#generate random data by calling gen_data
+do_gen_data=false
+#run model on pictures by calling run
+do_run=false
+#measure metrics by calling bm
+do_bm=false
+#compute metrics stats by calling stats
+do_stats=true
+
 #directory where everything will be stored.
 #if function gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
 main_dir="/home/erik/mit_300"
 #directories for each type of image
-gt_masks_dir="$main_dir/masks"
-gt_points_dir="$main_dir/points"
+gt_masks_dir="$main_dir/gt_masks"
+gt_points_dir="$main_dir/gt_points"
 gt_maps_dir="$main_dir/gt_maps"
 maps_dir="$main_dir/maps"
 stimuli_dir="$main_dir/stimuli"
 
 #source original images directory
-src_stimuli_dir="/home/erik/proj/ic/saliency_benchmarks/bms/cssd/images"
+src_stimuli_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/stimuli"
 #source stimuli extension
-stimuli_ext=".jpg"
+stimuli_ext=".jpeg"
+
+#result images format
+map_ext="_final_map.png"
+
 #use ground-truth masks
-use_gt_masks=true
+use_gt_masks=false
 #ground truth masks directory
-src_gt_masks_dir="/home/erik/proj/ic/saliency_benchmarks/bms/cssd/ground_truth_mask"
+src_gt_masks_dir=""
 #ground truth masks extension
-gt_masks_ext=".png"
-#use ground-truth points
-use_gt_points=false
+gt_masks_ext=""
+
+#use ground-truth fixation points
+use_gt_points=true
 #ground truth points directory
-src_gt_points_dir="/home/erik/proj/ic/saliency_benchmarks/bms/mit_300/BenchmarkIMAGES/"
+src_gt_points_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/points"
 #ground truth points extension
-gt_points_ext=".jpg"
+gt_points_ext="_fixPts.jpg"
+
 #use ground-truth maps
-use_gt_maps=false
+use_gt_maps=true
 #ground truth maps directory
-src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/mit_300/BenchmarkIMAGES/"
+src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/maps"
 #ground truth maps extension
-gt_maps_ext=".jpg"
+gt_maps_ext="_fixMap.jpg"
 
 #number of random images to take from source images dir
-sample=2
+n_samples=256
 
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd="/home/erik/proj/att/att/test.py im"
@@ -48,15 +63,30 @@ att_cmd_flags="-D -s $maps_dir -m col,cst"
 bm_cmd="/home/erik/proj/att/test/benchmark/metrics.py"
 bm_cmd_flags=""
 
-#result images format
-map_ext="_final_map.png"
-
-#result file
-bm_file="$main_dir/benchmark.txt"
-
-#stats calculating script
+#command to get statistics from metrics
 stats_cmd="/home/erik/proj/att/test/benchmark/bm_stats.py"
+stats_cmd_flags=""
+
+#run function results file
+run_file="$main_dir/run.txt"
+#bm function results file
+bm_file="$main_dir/bm.csv"
+#statistics file
 stats_file="$main_dir/stats.txt"
+
+#metrics to use. 
+#bm_* are metrics for binary masks.
+#cm_* are metrics for continuous maps.
+#fp_* are metrics for fixation point maps.
+bm_metrics="" #"auc_judd mae"
+cm_metrics="mae sim cc"
+fp_metrics="auc_judd nss" #"auc_judd auc_shuffled nss"
+
+#gets random file from directory
+rand_file()
+{
+	ls "$1" | shuf | head -n 1
+}
 
 #gets only filename of path, without extension. 
 #ex: /home/foo/bar.jpg -> bar
@@ -71,6 +101,13 @@ mkdir_check()
 	mkdir -- $1 || { echo "midir_check: could not create $1"; exit 1; }
 }
 
+#joins string $1 with delimiter $2.
+#ex: join "a b skdj jd" "," -> "a,b,skdj,jd"
+join()
+{
+	python -c "print('$2'.join('$1'.split()))"
+}
+
 #generates data
 gen_data()
 {
@@ -82,7 +119,7 @@ gen_data()
 	done
 
 	#getting images
-	cp -- $(ls "$src_stimuli_dir"/* | shuf | head -n $sample) "$stimuli_dir"
+	cp -- $(ls "$src_stimuli_dir"/* | shuf | head -n $n_samples) "$stimuli_dir"
 
 	#getting ground-truth masks
 	if "$use_gt_masks"; then
@@ -93,13 +130,14 @@ gen_data()
 	#getting ground-truth points
 	if "$use_gt_points"; then
 		for f in "$stimuli_dir/"*; do
-			cp -- "$src_gt_points_dir/$(fname $f)$gt_points_ext" "$points_dir"
+			cp -- "$src_gt_points_dir/$(fname $f)$gt_points_ext" \
+				"$gt_points_dir"
 		done
 	fi
 	#getting ground-truth maps
 	if "$use_gt_maps"; then
 		for f in "$stimuli_dir/"*; do
-			cp -- "$src_gt_maps_dir/$(fname $f)$gt_maps_ext" "$maps_dir"
+			cp -- "$src_gt_maps_dir/$(fname $f)$gt_maps_ext" "$gt_maps_dir"
 		done
 	fi
 }
@@ -114,42 +152,97 @@ run()
 	done	
 }
 
+#gets benchmark
 bm()
 {
+	#header for csv-formatted benchmark results
+	[[ ! -z $cm_metrics ]] && cm_m=$(join "cm_$cm_metrics" " cm_")
+	[[ ! -z $fp_metrics ]] && fp_m=$(join "fp_$fp_metrics" " fp_")
+	[[ ! -z $bm_metrics ]] && bm_m=$(join "bm_$bm_metrics" " bm_")
+	join "img_path $fp_m $bm_m $cm_m" ","
+
 	for st in "$stimuli_dir"/*; do
 		map="$maps_dir/$(fname $st)$map_ext"
 		gt_mask="$gt_masks_dir/$(fname $st)$gt_masks_ext"
 		gt_map="$gt_maps_dir/$(fname $st)$gt_maps_ext"
 		gt_points="$gt_points_dir/$(fname $st)$gt_points_ext"
-		echo "in $map..."
+		other_gt_points=$gt_points
+		while [ "$other_gt_points" = "$gt_points" ]; do
+			rand_map=$(rand_file "$stimuli_dir")
+			other_gt_points="$gt_points_dir/$(fname $rand_map)$gt_points_ext"
+			if [ "$n_samples" -lt 2 ]; then 
+				break; 
+			fi
+		done
 
-		printf "mae: "; $bm_cmd "mae" "$map" "$gt_mask" $bm_cmd_flags
-		printf "auc_judd: "; $bm_cmd "auc_judd" "$map" "$gt_mask" $bm_cmd_flags
-		echo
+		#echo "in $map..."
+		line="$map "
+
+		#fixation points metrics
+		for m in $fp_metrics; do
+			#printf "\tfp_$m: "
+			if [[ "$m" == "auc_shuffled" ]]; then
+				line+=$($bm_cmd "$m" "$map" "$gt_points" "$other_gt_points" \
+					$bm_cmd_flags)" "
+			else
+				line+=$($bm_cmd "$m" "$map" "$gt_points" $bm_cmd_flags)" "
+			fi
+		done
+
+		#binary mask metrics
+		for m in $bm_metrics; do
+			#printf "\tbm_$m: "
+			line+=$($bm_cmd "$m" "$map" "$gt_mask" $bm_cmd_flags)" "
+		done
+
+		#continuous map metrics
+		for m in $cm_metrics; do
+			#printf "\tcm_$m: "
+			line+=$($bm_cmd "$m" "$map" "$gt_map" $bm_cmd_flags)" "
+		done
+
+		join "$line" ","
+		#echo
 	done
+}
+
+#gets some benchmark statistics
+stats()
+{
+	"$stats_cmd" "$bm_file" "$stats_cmd_flags"
 }
 
 main()
 {
-	echo "generating data..."
-	gen_data
-	echo "done."
+	if $do_gen_data; then
+		echo "generating data..."
+		gen_data
+		echo -e "done.\n"
+	fi
 
-	echo "running model..."
-	run 2>&1 | tee -a $bm_file
-	echo "done."
+	if $do_run; then
+		echo "running model..."
+		run 2>&1 | tee -a "$run_file"
+		echo -e "done.\n"
+	fi
 
-	echo "executing benchmark..."
-	bm 2>&1 | tee -a $bm_file
-	exit 1
+	if $do_bm; then
+		echo "executing benchmark..."
+		bm 2>&1 | tee -a "$bm_file"
+		echo -e "done.\n"
+	fi
 
-	#echo "copying generator script to benchmark dir..."
+	if $do_stats; then
+		echo "getting some benchmark statistics..."
+		stats 2>&1 | tee -a "$stats_file"
+		echo -e "done.\n"
+	fi
+
+	echo "copying generator script to benchmark dir..."
 	cp -- "$0" $main_dir/gen_script.sh
+	echo -e "done.\n"
 
-	echo "getting some benchmark statistics..."
-	(cd $main_dir && $stats_cmd > $stats_file)
+	exit 0
 }
 
 main
-
-exit 0

@@ -251,8 +251,12 @@ def compute():
 
     #executing metric
     metric = sys.argv[1] 
-    score = METRICS_FUNCS[metric](*sys.argv[2:])
-    print(score)
+    try:
+        score = METRICS_FUNCS[metric](*sys.argv[2:])
+        print("%.6f" % score)
+    except:
+        print("_".join("(ERROR:[{}:{}])".format(sys.exc_info()[0].__name__, 
+            sys.exc_info()[1]).split()))
 
 def main():
     #test()

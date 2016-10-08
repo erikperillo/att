@@ -1,36 +1,26 @@
 #!/usr/bin/env python3
 
-import numpy as np
+import pandas as pd
+import sys
 
-FILEPATH = "benchmark.txt"
+def stats():
+    if len(sys.argv) < 2:
+        print("usage: stats <csv_file>")
+        exit() 
 
-STATS = [
-    "Intersects with benchmark mask?",
-    "Fraction in mask",
-    "Fraction of model mask within benchmark mask",
-    "Fraction of benchmark mask guessed by model"
-]
+    df = pd.read_csv(sys.argv[1])
 
-def cvt(string):
-    try:
-        return float(string)
-    except ValueError:
-        return 1.0 if string == "True" else 0.
-
-def get_stat(iterable, stat_str, delim=":"):
-    pre_proc = lambda l: cvt(l.split(delim)[-1].strip())
-    filter_f = lambda l: stat_str in l
-
-    return np.array(list(map(pre_proc, filter(filter_f, iterable))), 
-        dtype=float)
+    for col in df:
+        try:
+            data = df[col]
+            print("{}: mean={:.6f}, std={:.6f}, max={:.6f}, min={:.6f}".\
+                format(col, data.mean(), data.std(), data.max(), data.min()))
+        except:
+            print("could not get stats for col '{}'".format(col))
+            continue
 
 def main():
-    with open(FILEPATH) as f:
-        lines = [l for l in f]
-        for stat in STATS:
-            vals = get_stat(lines, stat)
-            print("{}: mean = {:.3f}, std = {:.3f}"\
-                .format(stat, vals.mean(), vals.std()))
+    stats()
 
 if __name__ == "__main__":
     main()
