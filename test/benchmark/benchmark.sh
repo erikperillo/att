@@ -4,11 +4,11 @@
 #filenames, except for possibly different extensions.
 
 #generate random data by calling gen_data
-do_gen_data=false
+do_gen_data=true
 #run model on pictures by calling run
-do_run=false
+do_run=true
 #measure metrics by calling bm
-do_bm=false
+do_bm=true
 #compute metrics stats by calling stats
 do_stats=true
 
@@ -53,7 +53,7 @@ src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/maps"
 gt_maps_ext="_fixMap.jpg"
 
 #number of random images to take from source images dir
-n_samples=256
+n_samples=10
 
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd="/home/erik/proj/att/att/test.py im"
@@ -80,7 +80,7 @@ stats_file="$main_dir/stats.txt"
 #fp_* are metrics for fixation point maps.
 bm_metrics="" #"auc_judd mae"
 cm_metrics="mae sim cc"
-fp_metrics="auc_judd nss" #"auc_judd auc_shuffled nss"
+fp_metrics="auc_judd auc_shuffled nss" #"auc_judd auc_shuffled nss"
 
 #gets random file from directory
 rand_file()

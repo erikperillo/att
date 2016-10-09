@@ -30,7 +30,7 @@ def std_norm(arr):
     return (arr - u)/(sigma if sigma else 1)
 
 def load_and_fit_dims(img_filepath_1, img_filepath_2, 
-    dtype=float, load_code=0):
+    dtype=np.float32, load_code=0):
     img_1 = np.array(cv2.imread(img_filepath_1, load_code), dtype=dtype)
     img_2 = np.array(cv2.imread(img_filepath_2, load_code), dtype=dtype)
 
@@ -39,7 +39,7 @@ def load_and_fit_dims(img_filepath_1, img_filepath_2,
 
     return img_1, img_2 
 
-def auc_judd(map_filepath, pts_filepath, jitter=1, to_plot=0):
+def auc_judd2(map_filepath, pts_filepath, jitter=1, to_plot=0):
     cmd = "; ".join([
         "addpath('{}')",
         "pkg load image",
@@ -59,7 +59,50 @@ def auc_judd(map_filepath, pts_filepath, jitter=1, to_plot=0):
 
     return score
 
-def auc_shuffled(map_filepath, pts_filepath, other_pts_filepath,
+def normalize(arr):
+    return (arr - arr.min())/(arr.max() - arr.min())
+
+def confusion_mtx(imap, bin_mask, divs=100, neg_bin_mask=None):
+    imap = normalize(imap)
+
+    positives = bin_mask.sum()
+    if neg_bin_mask is None:
+        neg_bin_mask = ~bin_mask
+        negatives = bin_mask.shape[0]*bin_mask.shape[1] - positives
+    else:
+        neg_bin_mask &= ~bin_mask
+        negatives = neg_bin_mask.sum()
+
+    #print("pos={}, neg={}".format(positives, negatives))
+    for thr in np.linspace(0.0, 1.0, divs):
+        thr_imap = imap > thr
+        tp = (thr_imap & bin_mask).sum() 
+        tn = (~thr_imap & neg_bin_mask).sum()
+        fp = negatives - tn
+        fn = positives - tp
+
+        yield (tp, fp, tn, fn)
+        #print("thr={}: tp={}, fp={}, tn={}, fn={}".format(thr, tp, fp, tn, fn))
+
+def _auc_judd(imap, pts, divs=128):
+    tpr = []
+    fpr = []
+
+    for tp, fp, tn, fn in confusion_mtx(imap, pts > 0, divs):
+        tpr.append(tp/(tp + fn))
+        fpr.append(fp/(fp + tn))
+
+    auc = np.trapz(tpr[::-1], fpr[::-1]) + (1 - max(fpr))
+
+    return auc
+
+def auc_judd(map_filepath, pts_filepath):
+    map_img, pts_img = load_and_fit_dims(map_filepath, pts_filepath)
+    score = _auc_judd(map_img, pts_img)
+    
+    return score
+
+def auc_shuffled2(map_filepath, pts_filepath, other_pts_filepath,
     n_splits=100, step_size=0.1, to_plot=0):
     cmd = "; ".join([
         "addpath('{}')",
@@ -81,6 +124,25 @@ def auc_shuffled(map_filepath, pts_filepath, other_pts_filepath,
     #print("executing command '%s'" % cmd)
     score = float(matlab_cmd(cmd))
 
+    return score
+
+def _auc_shuffled(imap, pts, other_pts, divs=128):
+    tpr = []
+    fpr = []
+
+    for tp, fp, tn, fn in confusion_mtx(imap, pts > 0, divs, other_pts > 0):
+        tpr.append(tp/(tp + fn))
+        fpr.append(fp/(fp + tn))
+
+    auc = np.trapz(tpr[::-1], fpr[::-1]) + (1 - max(fpr))
+
+    return auc
+
+def auc_shuffled(map_filepath, pts_filepath, other_pts_filepath):
+    map_img, pts_img = load_and_fit_dims(map_filepath, pts_filepath)
+    other_pts_img, __ = load_and_fit_dims(other_pts_filepath, pts_filepath)
+    score = _auc_shuffled(map_img, pts_img, other_pts_img)
+    
     return score
 
 def nss2(map_filepath, pts_filepath):
@@ -189,8 +251,18 @@ def mae(map_filepath, gt_map_filepath):
     return score
  
 def test():
+    print("in auc_judd2...")
+    score = auc_judd2("map.jpg", "pts.jpg")
+    print("done. score =", score)
+    print()
+
     print("in auc_judd...")
     score = auc_judd("map.jpg", "pts.jpg")
+    print("done. score =", score)
+    print()
+
+    print("in auc_shuffled2...")
+    score = auc_shuffled2("map.jpg", "pts.jpg", "other_pts.jpg")
     print("done. score =", score)
     print()
 
@@ -198,6 +270,7 @@ def test():
     score = auc_shuffled("map.jpg", "pts.jpg", "other_pts.jpg")
     print("done. score =", score)
     print()
+    exit()
 
     print("in nss2...")
     score = nss2("map.jpg", "pts.jpg")
