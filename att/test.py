@@ -29,7 +29,11 @@ IM_NORM_PARAMS = {
     "thr_type": "otsu",
     "contrast_type": "sq",
     "score_type": "cmdrssq",
-    "morph_op_args": {"erosion_ksize": 5, "dilation_ksize": 31, "opening": True}
+    "morph_op_args": {
+        "erosion_ksize": 7, 
+        "dilation_ksize": 35,
+        "opening": True
+    }
 }
 #pyramid weight function
 PYR_W_F = im._one
@@ -74,7 +78,7 @@ def pre_proc(img, blur_params):
 
 def mask(img, dilation_ksize=31, frac=0.8):
     """
-    Marks whitest areas on image.
+    Makes mask from whitest areas on image.
     """
     if img.dtype != np.uint8:
         img = np.array(cvx.scale(img, 0, 255), dtype=np.uint8)
@@ -115,72 +119,6 @@ def in_mask(img, mask):
     in_mask = (img & mask).sum()
 
     return total, in_mask
-
-def benchmark():
-    bm_img_filepath = oarg.Oarg("-b --bm-img", "", "path to benchmark image", 0) 
-    img_filepath = oarg.Oarg("-i --img", "", "path to image", 1) 
-    display = oarg.Oarg("-D --display", True, "display images")
-    use_mask = oarg.Oarg("-M --mask", False, "use mask")
-    img_mask_filepath = oarg.Oarg("-m --mask-path", "", "mask filepath")
-    #mask_frac = oarg.Oarg("-f --mask-frac", 0.8, "fraction param for mask")
-    #mask_dil_ksize = oarg.Oarg("-d --mask-dil-ksize", 32, 
-    #    "mask dilation ksize")
-    hlp = oarg.Oarg("-h --help", False, "this help message")
-
-    oarg.parse(sys.argv)
-
-    #help message
-    if hlp.val:
-        oarg.describeArgs("options:", def_val=True)
-        exit()
-
-    #checking validity of args
-    if not img_filepath.found or not bm_img_filepath.found:
-        error("image file not found (use -h for help)")
-    if use_mask.val and not img_mask_filepath.found:
-        error("image mask file not found (use -h for help)")
-
-    #loading images
-    bm_img = cv2.imread(bm_img_filepath.val, 0)
-    img = cv2.imread(img_filepath.val, 0)
-    if use_mask.val:
-        mask_img = cv2.imread(img_mask_filepath.val, 0)
-        if mask_img is None:
-            error("could not read mask image")
-        mask_img = cv2.resize(mask_img, bm_img.shape[::-1])
-
-    #checking validity of image
-    if img is None or bm_img is None:
-        error("could not read image")
-
-    #resizing images to be the same dimension
-    img = cv2.resize(img, bm_img.shape[::-1])
-
-    #similarity measures
-    total, within_mask = in_mask(img, bm_img)
-    if use_mask.val:
-        intersects = (mask_img & bm_img).any()
-        frac_in_bm_mask = (mask_img & bm_img).sum()/max(1, mask_img.sum())
-        frac_of_bm_mask = (mask_img & bm_img).sum()/max(1, bm_img.sum())
-
-    #printing results
-    #print("Comparing {} and {}".format(bm_img_filepath.val, img_filepath.val))
-    print("Non-masked image:\n\tTotal pix values: {}"
-        "\n\tIn mask: {}\n\tFraction in mask: {}"\
-        .format(total, within_mask, within_mask/max(total, 1)))
-    if use_mask.val:
-        print("Masked image:\n\tIntersects with benchmark mask?: {}"
-            "\n\tFraction of model mask within benchmark mask: {}"
-            "\n\tFraction of benchmark mask guessed by model: {}"\
-            .format(intersects, frac_in_bm_mask, frac_of_bm_mask))
-    
-    #displaying images if required
-    if display.val:
-        cvx.display(bm_img, "bm_img")
-        cvx.display(img, "img")
-        if use_mask.val:
-            cvx.display(mask_img, "mask_img")
-        cv2.waitKey(0)
 
 def gabor_test():
     #command-line arguments
@@ -285,8 +223,14 @@ def im_test():
         "gaussian kernel size for blur")
     debug = oarg.Oarg("-d --debug", True, "debug mode")
     display = oarg.Oarg("-D --display", True, "display images")
+    mk_mask = oarg.Oarg("-M --mask", False, "make binary mask")
     list_fts = oarg.Oarg("-l --list-features", False, "list available features")
     save_dir = oarg.Oarg("-s --save-dir", ".", "directory to save images")
+    norm_score_f = oarg.Oarg("-n --norm-score-f", "cmdrssq", 
+        "cc-normalization score function")
+    col_w = oarg.Oarg("--colw", 1.0, "color map weight")
+    cst_w = oarg.Oarg("--cstw", 1.0, "contrast map weight")
+    ort_w = oarg.Oarg("--ortw", 1.0, "orientation map weight")
     hlp = oarg.Oarg("-h --help", False, "this help message")
 
     #parsing args
@@ -329,6 +273,8 @@ def im_test():
     #getting center-surround kernel sizes
     cs_ksizes = str_to_list(str_cs_ksizes.val, int)
     maps = str_to_list(str_maps.val, str)
+    #setting up normalization parameters
+    IM_NORM_PARAMS["score_type"] = norm_score_f.val
 
     #getting file name without extension
     f_name = ".".join(os.path.basename(img_file.val).split(".")[:-1])
@@ -365,9 +311,13 @@ def im_test():
             imaps["ort_db"] = ort_db
 
     #getting final saliency map
-    final_im = im.combine([imaps["col"], imaps["cst"], imaps["ort"]])
-    #getting saliency mask
-    final_im_mask = mask(final_im, MASK_DIL_KSIZE, MASK_FRAC)
+    final_im = im.combine([
+        col_w.val*imaps["col"] if imaps["col"] is not None else None, 
+        cst_w.val*imaps["cst"] if imaps["cst"] is not None else None,
+        ort_w.val*imaps["ort"] if imaps["ort"] is not None else None])
+    if mk_mask.val:
+        #getting saliency mask
+        final_im_mask = mask(final_im, MASK_DIL_KSIZE, MASK_FRAC)
 
     #saving final result
     if save_dir.val:
@@ -376,8 +326,9 @@ def im_test():
                 cvx.save(imap, "%s/%s_%s_map.png" % \
                     (save_dir.val, f_name, name))
         cvx.save(final_im, "%s/%s_final_map.png" % (save_dir.val, f_name))
-        cvx.save(final_im_mask, 
-            "%s/%s_final_map_mask.png" % (save_dir.val, f_name))
+        if mk_mask.val:
+            cvx.save(final_im_mask, 
+                "%s/%s_final_map_mask.png" % (save_dir.val, f_name))
 
     #displaying results if required
     if display.val:
@@ -385,7 +336,8 @@ def im_test():
             if imap is not None:
                 cvx.display(imap, name)
         cvx.display(final_im, "final im")
-        cvx.display(final_im_mask, "final im mask")
+        if mk_mask.val:
+            cvx.display(final_im_mask, "final im mask")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -481,12 +433,9 @@ def main():
     #features test
     elif test == "feat":
         feat_test()
-    #comparison between model-made mask and benchmark mask
-    elif test == "bm":
-        benchmark()
     else:
         print("unknown test '%s' (use %s)" %\
-             (test, " or ".join(("im", "gabor", "feat", "bm"))))
+             (test, " or ".join(("im", "gabor", "feat"))))
 
 if __name__ == "__main__":
     main()

@@ -4,18 +4,20 @@
 #filenames, except for possibly different extensions.
 
 #generate random data by calling gen_data
-do_gen_data=true
+do_gen_data=false
 #run model on pictures by calling run
-do_run=true
+do_run=false
 #measure metrics by calling bm
-do_bm=true
+do_bm=false
 #compute metrics stats by calling stats
 do_stats=true
 
 #directory where everything will be stored.
 #if function gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
-main_dir="/home/erik/mit_300"
+#can be changed via command line.
+main_dir="/home/erik/grid_search/db2"
+[[ ! -z "$1" ]] && main_dir="$1"
 #directories for each type of image
 gt_masks_dir="$main_dir/gt_masks"
 gt_points_dir="$main_dir/gt_points"
@@ -24,7 +26,7 @@ maps_dir="$main_dir/maps"
 stimuli_dir="$main_dir/stimuli"
 
 #source original images directory
-src_stimuli_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/stimuli"
+src_stimuli_dir="/home/erik/grid_search/db/stimuli"
 #source stimuli extension
 stimuli_ext=".jpeg"
 
@@ -41,23 +43,25 @@ gt_masks_ext=""
 #use ground-truth fixation points
 use_gt_points=true
 #ground truth points directory
-src_gt_points_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/points"
+src_gt_points_dir="/home/erik/grid_search/db/gt_points"
 #ground truth points extension
 gt_points_ext="_fixPts.jpg"
 
 #use ground-truth maps
 use_gt_maps=true
 #ground truth maps directory
-src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/maps"
+src_gt_maps_dir="/home/erik/grid_search/db/gt_maps"
 #ground truth maps extension
 gt_maps_ext="_fixMap.jpg"
 
 #number of random images to take from source images dir
-n_samples=10
+n_samples=64
 
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd="/home/erik/proj/att/att/test.py im"
-att_cmd_flags="-D -s $maps_dir -m col,cst"
+#flags to use. can be extended via command line.
+att_cmd_flags="-D -d -s $maps_dir"
+[[ ! -z "$2" ]] && att_cmd_flags="$att_cmd_flags ""$2"
 
 #command to execute some benchmark metric in format $bm <map> [...]
 bm_cmd="/home/erik/proj/att/test/benchmark/metrics.py"
@@ -72,7 +76,9 @@ run_file="$main_dir/run.txt"
 #bm function results file
 bm_file="$main_dir/bm.csv"
 #statistics file
-stats_file="$main_dir/stats.txt"
+stats_file="$main_dir/stats.csv"
+#error and log messages file
+log_file="$main_dir/bm.log"
 
 #metrics to use. 
 #bm_* are metrics for binary masks.
@@ -80,7 +86,7 @@ stats_file="$main_dir/stats.txt"
 #fp_* are metrics for fixation point maps.
 bm_metrics="" #"auc_judd mae"
 cm_metrics="mae sim cc"
-fp_metrics="auc_judd auc_shuffled nss" #"auc_judd auc_shuffled nss"
+fp_metrics="auc_judd nss" #"auc_judd auc_shuffled nss"
 
 #gets random file from directory
 rand_file()
@@ -222,19 +228,19 @@ main()
 
 	if $do_run; then
 		echo "running model..."
-		run 2>&1 | tee -a "$run_file"
+		run 2>&1 | tee "$run_file"
 		echo -e "done.\n"
 	fi
 
 	if $do_bm; then
 		echo "executing benchmark..."
-		bm 2>&1 | tee -a "$bm_file"
+		bm | tee "$bm_file"
 		echo -e "done.\n"
 	fi
 
 	if $do_stats; then
 		echo "getting some benchmark statistics..."
-		stats 2>&1 | tee -a "$stats_file"
+		stats | tee "$stats_file"
 		echo -e "done.\n"
 	fi
 
@@ -245,4 +251,4 @@ main()
 	exit 0
 }
 
-main
+main 2> "$log_file"
