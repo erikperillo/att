@@ -211,23 +211,24 @@ def gabor_test():
 def im_test():
     #command-line arguments
     img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
-    pyr_lvls = oarg.Oarg("-p --pyr-lvls", 3, "levels for pyramid") 
+    pyr_lvls = oarg.Oarg("-p --pyrlvls", 3, "levels for pyramid") 
     #must be comma-separated
-    str_cs_ksizes= oarg.Oarg("-c --cs-ks", "3,7", 
+    str_cs_ksizes= oarg.Oarg("-c --csks", "3,7", 
         "center-surround kernel sizes") 
     #must be comma-separated
     str_maps = oarg.Oarg("-m --maps", "col,cst,ort", "maps to use")
-    max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
-    max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
-    blur_ksize = oarg.Oarg("-b --blur-ksize", 5, 
+    max_w = oarg.Oarg("-W --maxw", 800, "maximum width for image")
+    max_h = oarg.Oarg("-H --maxh", 600, "maximum hwight for image")
+    blur_ksize = oarg.Oarg("-b --blurksize", 5, 
         "gaussian kernel size for blur")
     debug = oarg.Oarg("-d --debug", True, "debug mode")
     display = oarg.Oarg("-D --display", True, "display images")
     mk_mask = oarg.Oarg("-M --mask", False, "make binary mask")
     list_fts = oarg.Oarg("-l --list-features", False, "list available features")
     save_dir = oarg.Oarg("-s --save-dir", ".", "directory to save images")
-    norm_score_f = oarg.Oarg("-n --norm-score-f", "cmdrssq", 
+    norm_score_f = oarg.Oarg("-n --ns --norm-score-f", "cmdrssq", 
         "cc-normalization score function")
+    control = oarg.Oarg("-C --control", False, "control random map")
     col_w = oarg.Oarg("--colw", 1.0, "color map weight")
     cst_w = oarg.Oarg("--cstw", 1.0, "contrast map weight")
     ort_w = oarg.Oarg("--ortw", 1.0, "orientation map weight")
@@ -280,41 +281,46 @@ def im_test():
     f_name = ".".join(os.path.basename(img_file.val).split(".")[:-1])
 
     imaps = {"col": None, "cst": None, "ort": None}
-    #color intensity map
-    if "col" in maps:
-        col_db, col_imap = im.color_map(img, 
-            pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
-            pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
-            norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
-            debug=debug.val)
-        imaps["col"] = col_imap
-        if debug.val:
-            imaps["col_db"] = col_db
-    #contrast intensity map
-    if "cst" in maps:
-        cst_db, cst_imap = im.contrast_map(img, 
-            pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
-            pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
-            norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
-            debug=debug.val)
-        imaps["cst"] = cst_imap
-        if debug.val:
-            imaps["cst_db"] = cst_db
-    #orientation intensity map
-    if "ort" in maps:
-        ort_db, ort_imap = im.orientation_map(img, 
-            pyr_lvls=pyr_lvls.val, pyr_w_f=PYR_W_F,
-            norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
-            debug=debug.val)
-        imaps["ort"] = ort_imap
-        if debug.val:
-            imaps["ort_db"] = ort_db
+    if control.val:
+        final_im = np.random.rand(*img.shape[:2])
+        final_im -= final_im.min()
+    else:
+        #color intensity map
+        if "col" in maps:
+            col_db, col_imap = im.color_map(img, 
+                pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
+                pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
+                norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+                debug=debug.val)
+            imaps["col"] = col_imap
+            if debug.val:
+                imaps["col_db"] = col_db
+        #contrast intensity map
+        if "cst" in maps:
+            cst_db, cst_imap = im.contrast_map(img, 
+                pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
+                pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
+                norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+                debug=debug.val)
+            imaps["cst"] = cst_imap
+            if debug.val:
+                imaps["cst_db"] = cst_db
+        #orientation intensity map
+        if "ort" in maps:
+            ort_db, ort_imap = im.orientation_map(img, 
+                pyr_lvls=pyr_lvls.val, pyr_w_f=PYR_W_F,
+                norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+                debug=debug.val)
+            imaps["ort"] = ort_imap
+            if debug.val:
+                imaps["ort_db"] = ort_db
 
-    #getting final saliency map
-    final_im = im.combine([
-        col_w.val*imaps["col"] if imaps["col"] is not None else None, 
-        cst_w.val*imaps["cst"] if imaps["cst"] is not None else None,
-        ort_w.val*imaps["ort"] if imaps["ort"] is not None else None])
+        #getting final saliency map
+        final_im = im.combine([
+            col_w.val*imaps["col"] if imaps["col"] is not None else None, 
+            cst_w.val*imaps["cst"] if imaps["cst"] is not None else None,
+            ort_w.val*imaps["ort"] if imaps["ort"] is not None else None])
+
     if mk_mask.val:
         #getting saliency mask
         final_im_mask = mask(final_im, MASK_DIL_KSIZE, MASK_FRAC)
