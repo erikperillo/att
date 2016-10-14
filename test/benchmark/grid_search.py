@@ -4,30 +4,32 @@
 #executes benchmark.sh script for various saliency map parameters
 
 import subprocess as sp
+import shutil
 import itertools
 import time
 import sys
 import os
 
 #script variables
-#metrics to use in resuming step
-resume = True
-metrics = ["fp_auc_judd", "fp_nss", "cm_sim", "cm_mae", "cm_cc"]
 #pyramid levels
 pyr_lvls = [3]
 #normalization scores types
 norm_scores = ["cmdrssq"]
 #color map weights
-col_ws = [1]
+col_ws = [16, 32, 64]
 #contrast map weights
 cst_ws = [1]
 #orientation map weights
 ort_ws = [0]
 #base directory where each directory will be stored
-base_dir = "/home/erik/test"
+base_dir = "/home/erik/grid_search/refined_weight_anal2"
 #benchmark script command
 bm_cmd = "/home/erik/proj/att/test/benchmark/benchmark.sh"
 bm_cmd_flags = ""
+#resume whole grid search in csv files
+resume = True
+#metrics to use in resuming step
+metrics = ["fp_auc_judd", "fp_nss", "cm_sim", "cm_cc"]
 #resuming command
 resume_cmd = "/home/erik/proj/att/test/benchmark/resume.sh"
 
@@ -110,6 +112,11 @@ def grid_search():
                 f.write(ret.stdout.decode())
 
             print("done. saved in '%s'" % metric_filepath)
+
+    print("copying generator script to file '%s'..." %\
+            os.path.join(base_dir, "gen_grid_search.py"))
+    shutil.copyfile(__file__, os.path.join(base_dir, "gen_grid_search.py"))
+    print("done.")
 
 def main():
     if os.path.exists(base_dir):

@@ -258,7 +258,7 @@ def im_test():
     if len(img.shape) < 3:
         error("image must be colored")
 
-    print("on file %s" % img_file.val)
+    #print("on file %s" % img_file.val)
 
     #resizing image
     img = cvx.resize(img, max_w.val, max_h.val)

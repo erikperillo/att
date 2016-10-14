@@ -141,6 +141,14 @@ def _cc_cm_dists_mean(cc_params):
     __, centroids = cc_params
     return _cc_sum_cm_dists(cc_params)/len(centroids)
 
+def _cc_one(cc_params):
+    """!
+    Neutral score function. Always returns one.
+    
+    @param cc_params Connected components params in format (stats, centroids).
+    """
+    return 1.0
+
 def _cc_num(cc_params):
     """!
     Number of connected components.
@@ -178,13 +186,15 @@ def _cc_sq_cm_dists_mean(cc_params):
 def _cc_sq_cm_dists_mean_sqr(cc_params):
     """!
     Root of mean of squares of distances of centroids of connected components.
-    
+
     @param cc_params Connected components params in format (stats, centroids).
     """
     return np.sqrt(_cc_sq_cm_dists_mean(cc_params))
 
 ##Available weight functions for #cc_norm.
 CC_NORM_SCORE_FUNCS = {
+    #neutral weight -- always one
+    "one": _cc_one,
     #number of connected components
     "num": _cc_num,
     #mean of center of mass distances
