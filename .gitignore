@@ -3,6 +3,7 @@
 *.jpg
 *.swp
 *.swo
+*.db
 __pycache__/
 att/cvx.py
 doc/*

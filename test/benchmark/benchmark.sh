@@ -16,7 +16,7 @@ do_stats=true
 #if function gen_data is not called, assumes main_dir still has the structure
 #created by gen_data.
 #can be changed via command line.
-main_dir="/home/erik/grid_search"
+main_dir="/home/erik/test"
 [[ ! -z "$1" ]] && main_dir="$1"
 #directories for each type of image
 gt_masks_dir="$main_dir/gt_masks"
@@ -26,8 +26,9 @@ maps_dir="$main_dir/maps"
 stimuli_dir="$main_dir/stimuli"
 
 #source original images directory
-#src_stimuli_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/stimuli"
-src_stimuli_dir="/home/erik/grid_search/judd_db/stimuli"
+#src_stimuli_dir="/home/erik/test/stimuli"
+src_stimuli_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/stimuli"
+#src_stimuli_dir="/home/erik/grid_search/judd_db/stimuli"
 #source stimuli extension
 stimuli_ext=".jpeg"
 
@@ -44,21 +45,23 @@ gt_masks_ext=""
 #use ground-truth fixation points
 use_gt_points=true
 #ground truth points directory
-#src_gt_points_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/points"
-src_gt_points_dir="/home/erik/grid_search/judd_db/gt_points"
+#src_gt_points_dir="/home/erik/test/gt_points"
+src_gt_points_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/points"
+#src_gt_points_dir="/home/erik/grid_search/judd_db/gt_points"
 #ground truth points extension
 gt_points_ext="_fixPts.jpg"
 
 #use ground-truth maps
 use_gt_maps=true
 #ground truth maps directory
-#src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/maps"
-src_gt_maps_dir="/home/erik/grid_search/judd_db/gt_maps"
+#src_gt_maps_dir="/home/erik/test/gt_maps"
+src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/maps"
+#src_gt_maps_dir="/home/erik/grid_search/judd_db/gt_maps"
 #ground truth maps extension
 gt_maps_ext="_fixMap.jpg"
 
 #number of random images to take from source images dir
-n_samples=128
+n_samples=3
 
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd="/home/erik/proj/att/att/test.py im"

@@ -4,34 +4,100 @@
 #executes benchmark.sh script for various saliency map parameters
 
 import subprocess as sp
-import shutil
 import itertools
+import datetime
+import shutil
+import shelve
 import time
+import cv2
 import sys
 import os
 
-#script variables
-#pyramid levels
-pyr_lvls = [3]
-#normalization scores types
-norm_scores = ["cmdrssq"]
-#color map weights
-col_ws = [16, 32, 64]
-#contrast map weights
-cst_ws = [1]
-#orientation map weights
-ort_ws = [0]
 #base directory where each directory will be stored
-base_dir = "/home/erik/grid_search/refined_weight_anal2"
+base_dir = "/home/erik/gtest17"
+
+#configuration file path
+conf_filepath = "/home/erik/proj/att/att/grid_search_conf.db"
+
 #benchmark script command
 bm_cmd = "/home/erik/proj/att/test/benchmark/benchmark.sh"
 bm_cmd_flags = ""
+
 #resume whole grid search in csv files
 resume = True
+
 #metrics to use in resuming step
 metrics = ["fp_auc_judd", "fp_nss", "cm_sim", "cm_cc"]
+
 #resuming command
 resume_cmd = "/home/erik/proj/att/test/benchmark/resume.sh"
+
+#parameters for intensity map calculation
+params = dict(
+    gaussian_blur_params = [
+        {
+            "ksize": (5, 5),
+            "sigmaX": 0.0,
+            "sigmaY": 0.0,
+            "borderType": cv2.BORDER_DEFAULT
+        },
+    ],
+
+    im_norm_methods = [
+        "cc",
+    ],
+
+    im_norm_params = [
+        {
+            "thr_type": "otsu",
+            "contrast_type": "none",
+            "score_type": "num",
+            "morph_op_args": {
+                "erosion_ksize": 3,
+                "dilation_ksize": 3,
+                "opening": True
+            }
+        },
+    ],
+
+    pyr_w_f = [
+        "one",
+        "one_over_sqrt_n",
+        "sqrt_n"
+    ],
+
+    cs_w_f = [
+        "one"
+    ],
+
+    cs_ksizes = [
+        (3, 7),
+    ],
+
+    maps = [
+        ("col", "cst", "ort"),
+    ],
+
+    norm_score_f = [
+        "num",
+    ],
+
+    col_w = [
+        4,
+    ],
+
+    cst_w = [
+        1,
+    ],
+
+    ort_w = [
+        1/4,
+    ],
+
+    control = [
+        False,
+    ]
+)
 
 def fmt_time(seconds):
     hours = int(seconds)//3600
@@ -43,24 +109,13 @@ def fmt_time(seconds):
 def str_fmt_time(seconds):
     return "%.3dh%.2dm%.2ds" % fmt_time(seconds)
 
-def params_tuple_to_dict(run_params):
-    pyrlvls, ns, colw, cstw, ortw = run_params
-    
-    params_dict = locals()
-    del params_dict["run_params"]
-
-    return params_dict
-
-def mk_dir_name(params_dict, val_sep="-", param_sep="_"):
-    return param_sep.join(k + val_sep + str(v) for k, v in params_dict.items())
-
-def mk_flags(params_dict):
-    return " ".join("--%s %s" % (k, str(v)) for k, v in params_dict.items())
+def mk_dir_name():
+    return datetime.datetime.now().strftime("%b-%d-%Y_%Hh%Mm%Ss")
 
 def ok_params(params_dict):
-    colw = params_dict["colw"]
-    cstw = params_dict["cstw"]
-    ortw = params_dict["ortw"]
+    colw = params_dict["col_w"]
+    cstw = params_dict["cst_w"]
+    ortw = params_dict["ort_w"]
 
     if colw == 0 and cstw == 0 and ortw == 0:
         return False
@@ -75,31 +130,55 @@ def ok_params(params_dict):
 
     return True
 
-def run_bm(params_dict):
-    out_dir = mk_dir_name(params_dict)
-    flags = "%s %s" % (bm_cmd_flags, mk_flags(params_dict))
+def confs_gen(dict_of_lists):
+    keys = dict_of_lists.keys()
+    values_prod = itertools.product(*dict_of_lists.values())
 
+    for vals in values_prod:
+        params = {k: v for k, v in zip(keys, vals)}
+        yield params
+
+def mk_conf_file(filepath, conf_dict):
+    with shelve.open(filepath) as conf:
+        for k, v in conf_dict.items():
+            conf[k] = v
+
+def run_bm():
+    #making run dir
+    out_dir = mk_dir_name()
     out_dir = os.path.join(base_dir, out_dir)
+
+    #making command
+    flags = "%s" % bm_cmd_flags
     cmd = bm_cmd.split() + [out_dir] + [flags]
 
+    #running
     ret = sp.run(cmd)
 
-    return ret
+    return out_dir, ret
 
 def grid_search():
-    params = itertools.product(pyr_lvls, norm_scores, col_ws, cst_ws, ort_ws)
-    params = map(params_tuple_to_dict, params)
-    params = filter(ok_params, params)
+    confs = (c for c in confs_gen(params))
+    confs = filter(ok_params, confs)
 
     total_time = 0
-    for p in params:
+    for conf in confs:
+        print("generating config file '%s' ..." % conf_filepath)
+        mk_conf_file(conf_filepath, conf)
+
+        print("running bm ...")
         start_time = time.time()
-        run_bm(p)
+        out_dir, __ = run_bm()
         partial_time = int(time.time() - start_time)
 
         print("[grid_search] run elapsed time: %s" % str_fmt_time(partial_time))
         total_time += partial_time
         print("[grid_search] total elapsed time: %s" % str_fmt_time(total_time))
+
+        #writing configuration to dir
+        with open(os.path.join(out_dir, "im_params.txt"), "w") as f:
+            for k, v in conf.items():
+                print("%s:" % k, v, file=f)
 
     if resume:
         for m in metrics:

@@ -21,7 +21,7 @@ colors = list("bgmykwcr")
 
 def label_fmt(label):
     label = os.path.basename(label)
-    label = [x for x in label.split("_") if "colw" in x][0]
+    #label = [x for x in label.split("_") if "colw" in x][0]
     return label
 
 def path_to_title(filepath):

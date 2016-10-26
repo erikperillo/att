@@ -12,7 +12,16 @@ import cv2
 import os
 import sys
 import oarg
+import shelve
 from functools import reduce
+
+WEIGHT_FUNCS = {
+    "one": lambda n: 1,
+    "n": lambda n: n + 1,
+    "one_over_n": lambda n: 1/(n + 1),
+    "one_over_sqrt_n": lambda n: 1/np.sqrt(n + 1),
+    "sqrt_n": lambda n: np.sqrt(n + 1)
+}
 
 #default parameters for gaussian blur
 GAUSSIAN_BLUR_DEF_PARAMS = {
@@ -22,39 +31,12 @@ GAUSSIAN_BLUR_DEF_PARAMS = {
     "borderType": cv2.BORDER_DEFAULT
 }
 
-#intensity map normalization method
-IM_NORM_METHOD = "cc"
-#intensity map normalization parameters
-IM_NORM_PARAMS = {
-    "thr_type": "otsu",
-    "contrast_type": "sq",
-    "score_type": "cmdrssq",
-    "morph_op_args": {
-        "erosion_ksize": 7, 
-        "dilation_ksize": 35,
-        "opening": True
-    }
-}
-#pyramid weight function
-PYR_W_F = im._one
-#center-surround kernel size weight function
-CS_W_F = im._one
-#mask parameters
-MASK_FRAC = 0.5
-MASK_DIL_KSIZE = 11
-
 def error(msg, code=1):
     """
     Prints error message and exits with code.
     """
     print("error:", msg)
     exit(code)
-
-def str_to_list(string, tp, delim=","):
-    """
-    Divides string separated by delimiter and converts to tp.
-    """
-    return list(map(tp, string.split(delim)))
 
 def custom_dict(def_dict, custom_params):
     """
@@ -76,56 +58,18 @@ def pre_proc(img, blur_params):
 
     return img
 
-def mask(img, dilation_ksize=31, frac=0.8):
-    """
-    Makes mask from whitest areas on image.
-    """
-    if img.dtype != np.uint8:
-        img = np.array(cvx.scale(img, 0, 255), dtype=np.uint8)
-
-    #getting most salient areas
-    __, thr_img = cv2.threshold(img, int(frac*255), 255, cv2.THRESH_BINARY)
-    thr_img = cvx.morph_op(thr_img, 
-        erosion_ksize=None, dilation_ksize=dilation_ksize)
-
-    return thr_img
-
-def mark(img, dilation_ksize=31, frac=0.9, color=(0, 0, 255)):
-    """
-    Marks whitest areas on image.
-    """
-    thr_img = mask(img, dilation_ksize, frac)
-    *__, stats, __ = cv2.connectedComponentsWithStats(thr_img)
-
-    #drawing rectangles on salient areas
-    if(len(img.shape) < 3):
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    for (x, y, w, h, __) in stats: 
-        cv2.rectangle(img, (x, y), (x+w, y+h), color, 2)
-
-    return img
-
 def gabor_kernel_view(kernel, size=100):
     """
     Returns a visualization of the gabor kernel.
     """
     return cv2.resize(kernel, (size, size))
 
-def in_mask(img, mask):
-    """!
-    Computes how much of img is within masked area.
-    """
-    total = img.sum()
-    in_mask = (img & mask).sum()
-
-    return total, in_mask
-
 def gabor_test():
     #command-line arguments
-    img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
+    img_file = oarg.Oarg("-i --img", "", "path to image", 0)
     max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
     max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
-    blur_ksize = oarg.Oarg("-b --blur-ksize", 5, 
+    blur_ksize = oarg.Oarg("-b --blur-ksize", 5,
         "gaussian kernel size for blur")
     debug = oarg.Oarg("-d --debug", True, "debug mode")
     display = oarg.Oarg("-D --display", True, "display images")
@@ -133,19 +77,19 @@ def gabor_test():
     view_size = oarg.Oarg("-v --view-size", 100, "visualization size")
     clip = oarg.Oarg("-c --clip", True, "clip filter to positive values")
     #gabor kernel parameters
-    ksize = oarg.Oarg("-k --ksize", ft.DEF_GABOR_K_PARAMS["ksize"][0], 
+    ksize = oarg.Oarg("-k --ksize", ft.DEF_GABOR_K_PARAMS["ksize"][0],
         "gabor kernel size")
-    sigma = oarg.Oarg("-s --sigma", ft.DEF_GABOR_K_PARAMS["sigma"], 
+    sigma = oarg.Oarg("-s --sigma", ft.DEF_GABOR_K_PARAMS["sigma"],
         "gabor kernel sigma")
-    theta = oarg.Oarg("-t --theta", ft.DEF_GABOR_K_PARAMS["theta"], 
+    theta = oarg.Oarg("-t --theta", ft.DEF_GABOR_K_PARAMS["theta"],
         "gabor kernel theta")
-    lambd = oarg.Oarg("-l --lambda", ft.DEF_GABOR_K_PARAMS["lambd"], 
+    lambd = oarg.Oarg("-l --lambda", ft.DEF_GABOR_K_PARAMS["lambd"],
         "gabor kernel lambda")
-    gamma = oarg.Oarg("-g --gamma", ft.DEF_GABOR_K_PARAMS["gamma"], 
+    gamma = oarg.Oarg("-g --gamma", ft.DEF_GABOR_K_PARAMS["gamma"],
         "gabor kernel gamma")
-    psi = oarg.Oarg("-p --psi", ft.DEF_GABOR_K_PARAMS["psi"], 
+    psi = oarg.Oarg("-p --psi", ft.DEF_GABOR_K_PARAMS["psi"],
         "gabor kernel psi")
-    ktype = oarg.Oarg("-T --ktype", ft.DEF_GABOR_K_PARAMS["ktype"], 
+    ktype = oarg.Oarg("-T --ktype", ft.DEF_GABOR_K_PARAMS["ktype"],
         "gabor kernel type")
     hlp = oarg.Oarg("-h --help", False, "this help message")
 
@@ -168,7 +112,7 @@ def gabor_test():
         error("could not read image")
 
     print("on file %s" % img_file.val)
-    
+
     #converting to grayscale if needed
     if len(img.shape) > 2:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -210,28 +154,15 @@ def gabor_test():
 
 def im_test():
     #command-line arguments
-    img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
-    pyr_lvls = oarg.Oarg("-p --pyrlvls", 3, "levels for pyramid") 
-    #must be comma-separated
-    str_cs_ksizes= oarg.Oarg("-c --csks", "3,7", 
-        "center-surround kernel sizes") 
-    #must be comma-separated
-    str_maps = oarg.Oarg("-m --maps", "col,cst,ort", "maps to use")
+    img_file = oarg.Oarg("-i --img", "", "path to image", 0)
+    config_file = oarg.Oarg("-c --config-file", "config.db",
+        "path to config file")
     max_w = oarg.Oarg("-W --maxw", 800, "maximum width for image")
     max_h = oarg.Oarg("-H --maxh", 600, "maximum hwight for image")
-    blur_ksize = oarg.Oarg("-b --blurksize", 5, 
-        "gaussian kernel size for blur")
     debug = oarg.Oarg("-d --debug", True, "debug mode")
     display = oarg.Oarg("-D --display", True, "display images")
-    mk_mask = oarg.Oarg("-M --mask", False, "make binary mask")
     list_fts = oarg.Oarg("-l --list-features", False, "list available features")
     save_dir = oarg.Oarg("-s --save-dir", ".", "directory to save images")
-    norm_score_f = oarg.Oarg("-n --ns --norm-score-f", "cmdrssq", 
-        "cc-normalization score function")
-    control = oarg.Oarg("-C --control", False, "control random map")
-    col_w = oarg.Oarg("--colw", 1.0, "color map weight")
-    cst_w = oarg.Oarg("--cstw", 1.0, "contrast map weight")
-    ort_w = oarg.Oarg("--ortw", 1.0, "orientation map weight")
     hlp = oarg.Oarg("-h --help", False, "this help message")
 
     #parsing args
@@ -258,58 +189,71 @@ def im_test():
     if len(img.shape) < 3:
         error("image must be colored")
 
+    if not config_file.val:
+        error("configuration file must be specified (use -h for help)")
+
+    #configuring parameters
+    with shelve.open(config_file.val) as conf:
+        gaussian_blur_params = conf["gaussian_blur_params"]
+        im_norm_method = conf["im_norm_method"]
+        im_norm_params = conf["im_norm_params"]
+        pyr_w_f = WEIGHT_FUNCS[conf["pyr_w_f"]]
+        cs_w_f = WEIGHT_FUNCS[conf["cs_w_f"]]
+        cs_ksizes = conf["cs_ksizes"]
+        maps = conf["maps"]
+        norm_score_f = conf["norm_score_f"]
+        col_w = conf["col_w"]
+        cst_w = conf["cst_w"]
+        ort_w = conf["ort_w"]
+        control = conf["control"]
+        pyr_lvls = conf["pyr_lvls"]
+
     #print("on file %s" % img_file.val)
 
     #resizing image
     img = cvx.resize(img, max_w.val, max_h.val)
     #adapting image dimensions for proper pyramid up/downscaling
-    img = cvx.pyr_prepare(img, pyr_lvls.val)
+    img = cvx.pyr_prepare(img, pyr_lvls)
     #pre-processing image
-    img = pre_proc(img, {"ksize": 2*(blur_ksize.val,)})
+    img = pre_proc(img, gaussian_blur_params)
 
     #displaying original image
     if display.val:
         cvx.display(img, "original image", False)
 
-    #getting center-surround kernel sizes
-    cs_ksizes = str_to_list(str_cs_ksizes.val, int)
-    maps = str_to_list(str_maps.val, str)
-    #setting up normalization parameters
-    IM_NORM_PARAMS["score_type"] = norm_score_f.val
-
     #getting file name without extension
     f_name = ".".join(os.path.basename(img_file.val).split(".")[:-1])
 
     imaps = {"col": None, "cst": None, "ort": None}
-    if control.val:
+    if control:
         final_im = np.random.rand(*img.shape[:2])
         final_im -= final_im.min()
     else:
         #color intensity map
         if "col" in maps:
-            col_db, col_imap = im.color_map(img, 
-                pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
-                pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
-                norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+            col_db, col_imap = im.color_map(img,
+                pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
+                pyr_w_f=pyr_w_f, cs_w_f=cs_w_f,
+                norm_method=im_norm_method, norm_params=im_norm_params,
                 debug=debug.val)
             imaps["col"] = col_imap
             if debug.val:
                 imaps["col_db"] = col_db
         #contrast intensity map
         if "cst" in maps:
-            cst_db, cst_imap = im.contrast_map(img, 
-                pyr_lvls=pyr_lvls.val, cs_ksizes=cs_ksizes, 
-                pyr_w_f=PYR_W_F, cs_w_f=CS_W_F,
-                norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+            cst_db, cst_imap = im.contrast_map(img,
+                pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
+                pyr_w_f=pyr_w_f, cs_w_f=cs_w_f,
+                norm_method=im_norm_method, norm_params=im_norm_params,
                 debug=debug.val)
             imaps["cst"] = cst_imap
             if debug.val:
                 imaps["cst_db"] = cst_db
         #orientation intensity map
         if "ort" in maps:
-            ort_db, ort_imap = im.orientation_map(img, 
-                pyr_lvls=pyr_lvls.val, pyr_w_f=PYR_W_F,
-                norm_method=IM_NORM_METHOD, norm_params=IM_NORM_PARAMS,
+            ort_db, ort_imap = im.orientation_map(img,
+                pyr_lvls=pyr_lvls, pyr_w_f=pyr_w_f,
+                norm_method=im_norm_method, norm_params=im_norm_params,
                 debug=debug.val)
             imaps["ort"] = ort_imap
             if debug.val:
@@ -317,13 +261,9 @@ def im_test():
 
         #getting final saliency map
         final_im = im.combine([
-            col_w.val*imaps["col"] if imaps["col"] is not None else None, 
-            cst_w.val*imaps["cst"] if imaps["cst"] is not None else None,
-            ort_w.val*imaps["ort"] if imaps["ort"] is not None else None])
-
-    if mk_mask.val:
-        #getting saliency mask
-        final_im_mask = mask(final_im, MASK_DIL_KSIZE, MASK_FRAC)
+            col_w*imaps["col"] if imaps["col"] is not None else None,
+            cst_w*imaps["cst"] if imaps["cst"] is not None else None,
+            ort_w*imaps["ort"] if imaps["ort"] is not None else None])
 
     #saving final result
     if save_dir.val:
@@ -332,9 +272,6 @@ def im_test():
                 cvx.save(imap, "%s/%s_%s_map.png" % \
                     (save_dir.val, f_name, name))
         cvx.save(final_im, "%s/%s_final_map.png" % (save_dir.val, f_name))
-        if mk_mask.val:
-            cvx.save(final_im_mask, 
-                "%s/%s_final_map_mask.png" % (save_dir.val, f_name))
 
     #displaying results if required
     if display.val:
@@ -342,20 +279,18 @@ def im_test():
             if imap is not None:
                 cvx.display(imap, name)
         cvx.display(final_im, "final im")
-        if mk_mask.val:
-            cvx.display(final_im_mask, "final im mask")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
 def feat_test():
     #command-line arguments
-    img_file = oarg.Oarg("-i --img", "", "path to image", 0) 
+    img_file = oarg.Oarg("-i --img", "", "path to image", 0)
     #must be comma-separated
-    str_feats = oarg.Oarg("-f --features", 
+    str_feats = oarg.Oarg("-f --features",
         "l1,l0,r,g,b,y,hor,ver,l_diag,r_diag", "features to use")
     max_w = oarg.Oarg("-W --max-w", 800, "maximum width for image")
-    max_h = oarg.Oarg("-H --max-h", 600, "maximum hwight for image")
-    blur_ksize = oarg.Oarg("-b --blur-ksize", 5, 
+    max_h = oarg.Oarg("-H --max-h", 600, "maximum height for image")
+    blur_ksize = oarg.Oarg("-b --blur-ksize", 5,
         "gaussian kernel size for blur")
     display = oarg.Oarg("-D --display", True, "display images")
     list_fts = oarg.Oarg("-l --list-features", False, "list available features")
@@ -410,7 +345,7 @@ def feat_test():
     for feature in feats:
         print("\ton feature '%s' ..." % feature)
         feat_img = ft.get_feature(img, feature)
- 
+
         #displaying images
         if display.val:
             cvx.display(feat_img, "feature %s" % feature)

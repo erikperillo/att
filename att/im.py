@@ -253,10 +253,10 @@ def cc_norm_(im, contrast_f, thresh_f, conn_comps_f, morph_op_f, score_f,
     score = score_f(stats)
     if debug:
         db_vals.append(score)
-    
+
     return db_vals, im/max(score, 1)
 
-def cc_norm(im, 
+def cc_norm(im,
     thr_type="otsu", thr_args={},
     contrast_type="sq", contrast_args={},
     morph_op_args={},
@@ -289,8 +289,8 @@ def cc_norm(im,
 
 def frac_norm_(im, thr_f, debug=False):
     """!
-    Applies intensity map normalization via fractional method.    
-    
+    Applies intensity map normalization via fractional method.
+
     @param im Input intensity map.
     @param thr_f Threshold function to apply.
     @param debug Returns intermediate images if True.
@@ -308,7 +308,7 @@ def frac_norm_(im, thr_f, debug=False):
     _im = thr_f(img)
     if debug:
         db_vals = [_im]
-    
+
     #getting number of pixels with high activations
     whites = cv2.countNonZero(_im)
     #total number of pixels
@@ -346,7 +346,7 @@ def normalize(im, method="cc", **kwargs):
     """
     method = method.lower()
 
-    return IM_NORM_FUNCS[method](im, **kwargs) 
+    return IM_NORM_FUNCS[method](im, **kwargs)
 
 def get_center_surround_kernel(size, dtype=np.float32):
     """!
@@ -470,13 +470,13 @@ def _cs_op_sum(img, ksizes=(3, 7), weight_f=_one, dtype=np.float32):
     """
     return sum(_cs_op(img, ksizes, weight_f, dtype))
 
-def _lab_attr_map(img, 
+def _single_lab_feature_map(img,
     pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one,
     norm_method="cc", norm_params={},
     dtype=np.float32, debug=False):
     """!
     Gets intensity map of LAB colorspace feature.
-    
+
     @param img Input image.
     @param pyr_lvls Pyramid levels.
     @param cs_ksizes Center-surround kernel sizes.
@@ -488,24 +488,26 @@ def _lab_attr_map(img,
     #center surround function to apply
     cs_f = lambda x: _cs_op_sum(x, cs_ksizes, cs_w_f, dtype=dtype)
     #applying center surround of all kernel sizes to all levels
-    db_im, im = _pyr_op_sum(img, op_f=cs_f, pyr_lvls=pyr_lvls, 
+    db_im, im = _pyr_op_sum(img, op_f=cs_f, pyr_lvls=pyr_lvls,
         weight_f=pyr_w_f, debug=debug)
 
     #normalizing map
-    db_norm_im, norm_im = normalize(im, method=norm_method, debug=debug, 
+    db_norm_im, norm_im = normalize(im, method=norm_method, debug=debug,
         **norm_params)
+    #norm_im = norm_im**2
 
     #assembling debug image if required
     if debug:
         db_norm_im = [im] + db_norm_im[:-2]
-        db_norm_im = reduce(cvx.h_append, 
+        db_norm_im = reduce(cvx.h_append,
             map(lambda x: db_im.max()*cvx.normalize(x), db_norm_im))
         db_im = cvx.v_append(db_im, db_norm_im)
 
     return db_im, norm_im
 
-def _lab_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one, 
-    feats=list(feat.LAB_ATTR_FUNCS.keys()), 
+def _lab_features_map(img, pyr_lvls=3, cs_ksizes=(3, 7),
+    pyr_w_f=_one, cs_w_f=_one,
+    feats=list(feat.LAB_ATTR_FUNCS.keys()),
     norm_method="cc", norm_params={},
     dtype=np.float32, debug=False):
     """!
@@ -529,8 +531,8 @@ def _lab_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one,
 
     #getting center-surround on multiple kernel sizes and multiple pyramid
     #levels for each map
-    pyr_w_f(1)
-    map_iter = (_lab_attr_map(_img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
+    map_iter = (_single_lab_feature_map(_img,
+        pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
         norm_method=norm_method, norm_params=norm_params,
         pyr_w_f=pyr_w_f, cs_w_f=cs_w_f, dtype=dtype, debug=debug) \
         for _img in feat_iter)
@@ -540,35 +542,35 @@ def _lab_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one,
     else:
         return None, sum(_img for __, _img in map_iter)
 
-def color_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one, 
+def color_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one,
     norm_method="cc", norm_params={},
     colors=feat.LAB_COLORS, dtype=np.float32, debug=False):
     """!
-    Computes color intensity map. See #_lab_map.
+    Computes color intensity map. See #_lab_features_map.
     Assumes image comes in BGR.
-    
+
     @param colors Colors to use in map calculation.
     """
-    return _lab_map(img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes, 
-        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f, 
+    return _lab_features_map(img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
+        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f,
         norm_method=norm_method, norm_params=norm_params,
         feats=colors, dtype=dtype, debug=debug)
 
-def contrast_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one, 
+def contrast_map(img, pyr_lvls=3, cs_ksizes=(3, 7), pyr_w_f=_one, cs_w_f=_one,
     norm_method="cc", norm_params={},
     colors=feat.LAB_CONTRASTS, dtype=np.float32, debug=False):
     """!
-    Computes contrast intensity map. See #_lab_map.
+    Computes contrast intensity map. See #_lab_features_map.
     Assumes image comes in BGR.
-    
+
     @param colors Intensities to use in map calculation.
     """
-    return _lab_map(img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes, 
-        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f, 
+    return _lab_features_map(img, pyr_lvls=pyr_lvls, cs_ksizes=cs_ksizes,
+        pyr_w_f=pyr_w_f, cs_w_f=cs_w_f,
         norm_method=norm_method, norm_params=norm_params,
         feats=colors, dtype=dtype, debug=debug)
 
-def _single_orientation_map(img, orientation, pyr_lvls=3, pyr_w_f=_one, 
+def _single_orientation_map(img, orientation, pyr_lvls=3, pyr_w_f=_one,
     norm_method="cc", norm_params={},
     dtype=np.float32, debug=False, **kwargs):
     """!
@@ -607,7 +609,7 @@ def orientation_map(img, orientations=list(feat.ORIENTATIONS.keys()),
     """!
     Gets intensity map of all orientation features.
     Assumes image comes in BGR.
-    
+
     @param img Input image.
     @param orientations Orientations list.
     @param norm_method Normalization method.
@@ -616,7 +618,7 @@ def orientation_map(img, orientations=list(feat.ORIENTATIONS.keys()),
     @param dtype Data type.
     @param debug If True, returns intermediary images.
     @param kwargs Additional parameters for #_single_orientation_map.
-    """ 
+    """
     #all maps iterator
     map_iter = (_single_orientation_map(img, ort, pyr_lvls=pyr_lvls, 
         norm_method=norm_method, norm_params=norm_params,
@@ -638,7 +640,7 @@ MAP_FUNCTIONS = {
 
 def weighted_sum(maps):
     """!
-    Performs a weighted sum of maps to produce final saliency map. 
+    Performs a weighted sum of maps to produce final saliency map.
     The weight of each map is 1/n, where n is the number of features in map.
 
     @param maps Intensity maps in format (color, contrast, orientation).
