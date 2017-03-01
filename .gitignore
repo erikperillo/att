@@ -6,6 +6,7 @@
 *.db
 __pycache__/
 att/cvx.py
+att/deep/data/
 doc/*
 !test/imgs
 !doc/Doxyfile
