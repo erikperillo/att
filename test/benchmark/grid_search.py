@@ -17,7 +17,7 @@ import os
 base_dir = "/home/erik/gtest17"
 
 #configuration file path
-conf_filepath = "/home/erik/proj/att/att/grid_search_conf.db"
+conf_filepath = "/home/erik/proj/att/att/config.db"
 
 #benchmark script command
 bm_cmd = "/home/erik/proj/att/test/benchmark/benchmark.sh"
@@ -43,7 +43,7 @@ params = dict(
         },
     ],
 
-    im_norm_methods = [
+    im_norm_method = [
         "cc",
     ],
 
@@ -62,8 +62,6 @@ params = dict(
 
     pyr_w_f = [
         "one",
-        "one_over_sqrt_n",
-        "sqrt_n"
     ],
 
     cs_w_f = [
@@ -91,7 +89,11 @@ params = dict(
     ],
 
     ort_w = [
-        1/4,
+        0.1,
+    ],
+
+    pyr_lvls = [
+        3,
     ],
 
     control = [
@@ -102,7 +104,7 @@ params = dict(
 def fmt_time(seconds):
     hours = int(seconds)//3600
     minutes = (int(seconds)%3600)//60
-    seconds = seconds%60 
+    seconds = seconds%60
 
     return hours, minutes, seconds
 

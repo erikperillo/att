@@ -61,7 +61,7 @@ src_gt_maps_dir="/home/erik/proj/ic/saliency_benchmarks/bms/judd/maps"
 gt_maps_ext="_fixMap.jpg"
 
 #number of random images to take from source images dir
-n_samples=3
+n_samples=128
 
 #command to run model on single image. format: $cmd <img> [flags]
 att_cmd="/home/erik/proj/att/att/test.py im"

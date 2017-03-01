@@ -7,57 +7,20 @@ import os.path as op
 import sys
 import cv2
 
-AUC_JUDD_SRC = "AUC_Judd.m"
-AUC_SHUFFLED_SRC = "AUC_shuffled.m"
-CC_SRC = "CC.m"
-NSS_SRC = "NSS.m"
-SIM_SRC = "similarity.m"
-MATLAB_CMD = "octave --eval"
-
-def _matlab_cmd(cmd_str):
-    ret = sp.run(MATLAB_CMD.split() + [cmd_str], stdout=sp.PIPE, stderr=sp.PIPE)
-    output = ret.stdout.decode()    
-    #print(ret)
-    return output
-
-def matlab_cmd(cmd_str):
-    output = _matlab_cmd(cmd_str)
-    return output.split("=")[-1].strip()
-
 def std_norm(arr):
     sigma = arr.std()
     u = arr.mean()
     return (arr - u)/(sigma if sigma else 1)
 
-def load_and_fit_dims(img_filepath_1, img_filepath_2, 
+def load_and_fit_dims(img_filepath_1, img_filepath_2,
     dtype=np.float32, load_code=0):
     img_1 = np.array(cv2.imread(img_filepath_1, load_code), dtype=dtype)
     img_2 = np.array(cv2.imread(img_filepath_2, load_code), dtype=dtype)
 
     if img_1.shape != img_2.shape:
-        img_1 = cv2.resize(img_1, img_2.shape[:2][::-1]) 
+        img_1 = cv2.resize(img_1, img_2.shape[:2][::-1])
 
-    return img_1, img_2 
-
-def auc_judd2(map_filepath, pts_filepath, jitter=1, to_plot=0):
-    cmd = "; ".join([
-        "addpath('{}')",
-        "pkg load image",
-        "map = double(imread('{}'))",
-        "pts = double(imread('{}'))",
-        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
-        "if size(size(pts), 2) > 2 pts = rgb2gray(pts); end",
-        "[score, tp, fp, treshs] = AUC_Judd(map, pts>0, {}, {})",
-        "score"
-        ]).format(op.dirname(AUC_JUDD_SRC),
-            map_filepath, 
-            pts_filepath,
-            jitter, to_plot)
-
-    #print("executing command '%s'" % cmd)
-    score = float(matlab_cmd(cmd))
-
-    return score
+    return img_1, img_2
 
 def normalize(arr):
     return (arr - arr.min())/(arr.max() - arr.min())
@@ -76,7 +39,7 @@ def confusion_mtx(imap, bin_mask, divs=100, neg_bin_mask=None):
     #print("pos={}, neg={}".format(positives, negatives))
     for thr in np.linspace(0.0, 1.0, divs):
         thr_imap = imap > thr
-        tp = (thr_imap & bin_mask).sum() 
+        tp = (thr_imap & bin_mask).sum()
         tn = (~thr_imap & neg_bin_mask).sum()
         fp = negatives - tn
         fn = positives - tp
@@ -99,30 +62,6 @@ def _auc_judd(imap, pts, divs=128):
 def auc_judd(map_filepath, pts_filepath):
     map_img, pts_img = load_and_fit_dims(map_filepath, pts_filepath)
     score = _auc_judd(map_img, pts_img)
-    
-    return score
-
-def auc_shuffled2(map_filepath, pts_filepath, other_pts_filepath,
-    n_splits=100, step_size=0.1, to_plot=0):
-    cmd = "; ".join([
-        "addpath('{}')",
-        "pkg load image",
-        "map = double(imread('{}'))",
-        "pts = double(imread('{}'))",
-        "other_pts = double(imread('{}'))",
-        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
-        "if size(size(pts), 2) > 2 pts = rgb2gray(pts); end",
-        "if size(size(other_pts)) > 2 other_pts = rgb2gray(other_pts); end",
-        "[score, tp, fp] = AUC_shuffled(map, pts>0, other_pts>0, {}, {}, {})",
-        "score"
-        ]).format(op.dirname(AUC_SHUFFLED_SRC),
-            map_filepath, 
-            pts_filepath,
-            other_pts_filepath,
-            n_splits, step_size, to_plot)
-
-    #print("executing command '%s'" % cmd)
-    score = float(matlab_cmd(cmd))
 
     return score
 
@@ -142,56 +81,16 @@ def auc_shuffled(map_filepath, pts_filepath, other_pts_filepath):
     map_img, pts_img = load_and_fit_dims(map_filepath, pts_filepath)
     other_pts_img, __ = load_and_fit_dims(other_pts_filepath, pts_filepath)
     score = _auc_shuffled(map_img, pts_img, other_pts_img)
-    
-    return score
-
-def nss2(map_filepath, pts_filepath):
-    cmd = "; ".join([
-        "addpath('{}')",
-        "pkg load image",
-        "map = double(imread('{}'))",
-        "pts = double(imread('{}'))",
-        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
-        "if size(size(pts), 2) > 2 pts = rgb2gray(pts); end",
-        "score = NSS(map, pts>0)",
-        "score"
-        ]).format(op.dirname(AUC_JUDD_SRC),
-            map_filepath, 
-            pts_filepath)
-
-    #print("executing command '%s'" % cmd)
-    score = float(matlab_cmd(cmd))
-
     return score
 
 def _nss(sal_map, gt_pts_map):
     sal_map = std_norm(sal_map)
     gt_pts_map = gt_pts_map > 0
-    
     return (sal_map*gt_pts_map).sum()/gt_pts_map.sum()
 
 def nss(map_filepath, pts_filepath):
     map_img, pts_img = load_and_fit_dims(map_filepath, pts_filepath)
     score = _nss(map_img, pts_img)
-
-    return score 
- 
-def cc2(map_filepath, gt_map_filepath):
-    cmd = "; ".join([
-        "addpath('{}')",
-        "pkg load image",
-        "map = double(imread('{}'))",
-        "gt_map = double(imread('{}'))",
-        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
-        "if size(size(gt_map), 2) > 2 gt_map = rgb2gray(gt_map); end",
-        "score = CC(map, gt_map)",
-        "score"
-        ]).format(op.dirname(CC_SRC),
-            map_filepath, 
-            gt_map_filepath)
-
-    #print("executing command '%s'" % cmd)
-    score = float(matlab_cmd(cmd))
 
     return score
 
@@ -204,26 +103,6 @@ def _cc(sal_map, gt_sal_map):
 def cc(map_filepath, gt_map_filepath):
     map_img, gt_map_img = load_and_fit_dims(map_filepath, gt_map_filepath)
     score = _cc(map_img, gt_map_img)
-
-    return score
-
-def sim2(map_filepath, gt_map_filepath, to_plot=0):
-    cmd = "; ".join([
-        "addpath('{}')",
-        "pkg load image",
-        "map = double(imread('{}'))",
-        "gt_map = double(imread('{}'))",
-        "if size(size(map), 2) > 2 map = rgb2gray(map); end",
-        "if size(size(gt_map), 2) > 2 gt_map = rgb2gray(gt_map); end",
-        "score = similarity(map, gt_map, {})",
-        "score"
-        ]).format(op.dirname(AUC_JUDD_SRC),
-            map_filepath, 
-            gt_map_filepath,
-            to_plot)
-
-    #print("executing command '%s'" % cmd)
-    score = float(matlab_cmd(cmd))
 
     return score
 
@@ -249,20 +128,10 @@ def mae(map_filepath, gt_map_filepath):
     score = _mae(map_img, gt_map_img)
 
     return score
- 
-def test():
-    print("in auc_judd2...")
-    score = auc_judd2("map.jpg", "pts.jpg")
-    print("done. score =", score)
-    print()
 
+def test():
     print("in auc_judd...")
     score = auc_judd("map.jpg", "pts.jpg")
-    print("done. score =", score)
-    print()
-
-    print("in auc_shuffled2...")
-    score = auc_shuffled2("map.jpg", "pts.jpg", "other_pts.jpg")
     print("done. score =", score)
     print()
 
@@ -272,28 +141,13 @@ def test():
     print()
     exit()
 
-    print("in nss2...")
-    score = nss2("map.jpg", "pts.jpg")
-    print("done. score =", score)
-    print()
-
     print("in nss...")
     score = nss("map.jpg", "pts.jpg")
     print("done. score =", score)
     print()
 
-    print("in cc2...")
-    score = cc2("map.jpg", "other_map.jpg")
-    print("done. score =", score)
-    print()
-
     print("in cc...")
     score = cc("map.jpg", "other_map.jpg")
-    print("done. score =", score)
-    print()
-
-    print("in sim2...")
-    score = sim2("map.jpg", "other_map.jpg")
     print("done. score =", score)
     print()
 
@@ -323,12 +177,12 @@ def compute():
         exit()
 
     #executing metric
-    metric = sys.argv[1] 
+    metric = sys.argv[1]
     try:
         score = METRICS_FUNCS[metric](*sys.argv[2:])
         print("%.6f" % score)
     except:
-        print("_".join("(ERROR:[{}:{}])".format(sys.exc_info()[0].__name__, 
+        print("_".join("(ERROR:[{}:{}])".format(sys.exc_info()[0].__name__,
             sys.exc_info()[1]).split()))
 
 def main():

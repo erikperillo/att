@@ -14,7 +14,6 @@ data_filepaths = [
     "nss.csv",
     "cc.csv",
     "sim.csv",
-    #"mae.csv",
 ]
 
 colors = list("bgmykwcr")
@@ -89,7 +88,8 @@ def bar_plot(filepaths):
         rects.append(ret)
 
     ax.set_xticks(1 +indexes + n*width/2)
-    ax.set_xticklabels(labels, rotation="-45", fontsize="large")
+    #ax.set_xticklabels(labels, rotation="-45", fontsize="large")
+    ax.set_xticklabels(labels, rotation="horizontal", fontsize="large")
     ax.legend([r[0] for r in rects], [path_to_title(fp) for fp in filepaths])
     plt.show()
 
