@@ -6,12 +6,13 @@ import glob
 import numpy as np
 import pickle
 import random
+import gzip
 
 INP_SHAPE = (58, 98)
 
 STIMULI_DIR = "/home/erik/proj/ic/sal_benchmarks/bms/CAT2000/trainSet/Stimuli"
 MAPS_DIR = "/home/erik/proj/ic/sal_benchmarks/bms/CAT2000/trainSet/FIXATIONMAPS"
-OUT_DATA_FILEPATH = "./data/cat2000.pkl"
+OUT_DATA_FILEPATH = "./data/cat2000.gz"
 #OUT_DATA_FILEPATH = "./data/test.pkl"
 
 def normalize(data):
@@ -85,7 +86,7 @@ def main():
     x, y = files_to_mtx(STIMULI_DIR)
 
     print("saving...")
-    with open(OUT_DATA_FILEPATH, "wb") as f:
+    with gzip.open(OUT_DATA_FILEPATH, "wb") as f:
         pickle.dump((x, y), f)
     print("done.")
 

@@ -8,18 +8,18 @@ import numpy as np
 import theano
 import theano.tensor as T
 import lasagne
+import gzip
 import pickle
 
-DATASET_FILEPATH = "./data/cat2000.pkl"
+DATASET_FILEPATH = "./data/cat2000.gz"
 INPUT_SHAPE = (3, 58, 98)
 
 def load_dataset(filepath):
-    with open(filepath, "rb") as f:
+    with gzip.open(filepath, "rb") as f:
         X, y = pickle.load(f)
     return X, y
 
 def tr_cv_te_split(X, y, cv_frac=0.2, te_frac=0.1):
-    X, y = X[:100], y[:100]
     cv = int(cv_frac*len(y))
     te = int(te_frac*len(y))
     X_tr, y_tr = X[:-(cv+te)], y[:-(cv+te)]
@@ -117,7 +117,7 @@ def main():
     # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
     params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.nesterov_momentum(
-            loss, params, learning_rate=0.01, momentum=0.95)
+            loss, params, learning_rate=0.01, momentum=0.9)
 
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
@@ -141,7 +141,7 @@ def main():
     import trloop
     trloop.train_loop(
         X_tr, y_tr, train_fn,
-        n_epochs=16, batch_size=20,
+        n_epochs=32, batch_size=100,
         X_val=X_cv, y_val=y_cv, val_f=val_fn,
         val_acc_tol=None,
         max_its=None,
