@@ -56,17 +56,6 @@ def files_to_mtx(dir_path, do_norm=True, do_augment=True, files_ext="*.jpg"):
             print("\tWARNING: resized image/map from {} to {}".format(
                 old_shape, new_shape))
 
-        """import pylab
-        print("img shape: {}, map shape: {}".format(
-            img.shape, sal_map.shape))
-        pylab.gray()
-        pylab.axis("off")
-        pylab.subplot(1, 2, 1)
-        pylab.imshow(img[:, :, 0])
-        pylab.subplot(1, 2, 2)
-        pylab.imshow(swapax(img)[0, :, :])
-        pylab.show()"""
-
         x.append(swapax(img).flatten())
         y.append(sal_map.flatten())
         if do_augment:

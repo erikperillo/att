@@ -19,6 +19,7 @@ def load_dataset(filepath):
     return X, y
 
 def tr_cv_te_split(X, y, cv_frac=0.2, te_frac=0.1):
+    X, y = X[:100], y[:100]
     cv = int(cv_frac*len(y))
     te = int(te_frac*len(y))
     X_tr, y_tr = X[:-(cv+te)], y[:-(cv+te)]
@@ -93,7 +94,8 @@ def main():
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
-    target_var = T.ivector('targets')
+    #target_var = T.ivector('targets')
+    target_var = T.matrix('targets')
 
     # Create neural network model
     print("building network...", flush=True)
@@ -125,7 +127,7 @@ def main():
     test_loss = T.sqrt(test_loss.sum())
     #test_loss = test_loss + reg*0.001
     # As a bonus, also create an expression for the classification accuracy:
-    test_acc = T.scalar()*0
+    test_acc = T.mean(abs(test_prediction - target_var))
 
     print("compiling functions...", flush=True)
     # Compile a function performing a training step on a mini-batch (by giving
@@ -138,9 +140,9 @@ def main():
     print("calling loop")
     import trloop
     trloop.train_loop(
-        X_train, y_train, train_fn,
+        X_tr, y_tr, train_fn,
         n_epochs=16, batch_size=20,
-        X_val=X_val, y_val=y_val, val_f=val_fn,
+        X_val=X_cv, y_val=y_cv, val_f=val_fn,
         val_acc_tol=None,
         max_its=None,
         verbose=2)
