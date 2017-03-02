@@ -11,8 +11,8 @@ import lasagne
 import gzip
 import pickle
 
-DATASET_FILEPATH = "./data/cat2000.gz"
-INPUT_SHAPE = (3, 58, 98)
+DATASET_FILEPATH = "./data/judd.gz"
+INPUT_SHAPE = (3, 76, 100)
 
 def load_dataset(filepath):
     with gzip.open(filepath, "rb") as f:
@@ -39,9 +39,9 @@ def load_formatted_dataset(filepath, cv_frac=0.2, te_frac=0.1):
     print("X_te shape: {} | y_te shape: {}".format(X_te.shape, y_te.shape))
 
     print("Reshaping...")
-    X_tr = X_tr.reshape((-1,) + INPUT_SHAPE)
-    X_cv = X_cv.reshape((-1,) + INPUT_SHAPE)
-    X_te = X_te.reshape((-1,) + INPUT_SHAPE)
+    X_tr = X_tr.reshape((X_tr.shape[0],) + INPUT_SHAPE)
+    X_cv = X_cv.reshape((X_cv.shape[0],) + INPUT_SHAPE)
+    X_te = X_te.reshape((X_te.shape[0],) + INPUT_SHAPE)
     print("X_tr shape: {} | y_tr shape: {}".format(X_tr.shape, y_tr.shape))
     print("X_cv shape: {} | y_cv shape: {}".format(X_cv.shape, y_cv.shape))
     print("X_te shape: {} | y_te shape: {}".format(X_te.shape, y_te.shape))
