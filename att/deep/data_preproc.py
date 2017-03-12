@@ -14,7 +14,7 @@ import numpy as np
 import pickle
 import random
 try:
-    import pylab
+    #import pylab
     pylab_imported = True
 except:
     print("WARNING: won't be able to show images")
@@ -37,15 +37,16 @@ COL_DCVT_FUNCS = {
 }
 
 #paths
-DATASET_PATH = "/home/erik/proj/ic/saliency_datasets/judd"
-OUT_DATA_FILEPATH = "./data/judd.gz"
+DATASET_PATH = "/local/erik/judd"
+OUT_DATA_FILEPATH = "./data/juddtest.gz"
 
 #show images
 SHOW_IMGS = False
 SHOW_CHANNELS = False
 
 #image shape
-SHAPE = (76, 100)
+X_SHAPE = (76, 100)
+Y_SHAPE = (38, 50)
 
 #float datatype
 X_IMG_TO_FLOAT = True
@@ -75,13 +76,13 @@ AFFINE_TRANSFORMS = [
 ]
 #gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
 #top left
-TL_CORNER = None#0.666
+TL_CORNER = 0.666
 #top right
-TR_CORNER = None#0.666
+TR_CORNER = 0.666
 #bottom left
-BL_CORNER = None#0.666
+BL_CORNER = 0.666
 #bottom right
-BR_CORNER = None#0.666
+BR_CORNER = 0.666
 
 def get_stimuli_paths(dataset_path, dataset_name=""):
     """
@@ -142,6 +143,7 @@ def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
     return map_path
 
 def std_normalize(data):
+    print("data mean, std =", data.mean(), data.std())
     return (data - data.mean())/data.std()
 
 def unit_normalize(data):
@@ -283,16 +285,16 @@ def files_to_mtx():
             print("\taugmented from 1 sample to %d" % len(x_imgs))
 
         #resizing if necessary
-        if img.shape[:2] != SHAPE:
+        if img.shape[:2] != X_SHAPE:
             old_shape = img.shape[:2]
             for i in range(len(x_imgs)):
-                x_imgs[i] = tf.resize(x_imgs[i], SHAPE)
+                x_imgs[i] = tf.resize(x_imgs[i], X_SHAPE)
             print("\tresized stimulus from {} to {}".format(
                 old_shape, x_imgs[-1].shape[:2]))
-        if gt.shape[:2] != SHAPE:
+        if gt.shape[:2] != Y_SHAPE:
             old_shape = gt.shape[:2]
             for i in range(len(y_imgs)):
-                y_imgs[i] = tf.resize(y_imgs[i], SHAPE)
+                y_imgs[i] = tf.resize(y_imgs[i], Y_SHAPE)
             print("\tresized ground truth from {} to {}".format(
                 old_shape, y_imgs[-1].shape[:2]))
 
@@ -328,7 +330,7 @@ def files_to_mtx():
     print("y_mtx shape: {}, dtype: {}".format(y_mtx.shape, y_mtx.dtype))
 
     #total number of pixels in each channel
-    ch_len = SHAPE[0]*SHAPE[1]
+    ch_len = X_SHAPE[0]*X_SHAPE[1]
     n_channels = len(x_mtx[0])//ch_len
 
     #x normalization
@@ -336,6 +338,7 @@ def files_to_mtx():
         if X_NORMALIZE_PER_CHANNEL:
             print("normalizing x_mtx per channel")
             for i in range(n_channels):
+                print("channel", i)
                 rng = slice(i*ch_len, (i+1)*ch_len)
                 x_mtx[:, rng] = normalize(x_mtx[:, rng], X_NORMALIZATION)
         else:

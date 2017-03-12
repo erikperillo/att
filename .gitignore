@@ -1,7 +1,9 @@
 *.pyc
 *.png
 *.jpg
+*.pkl
 *.swp
+*.npz
 *.swo
 *.db
 __pycache__/
