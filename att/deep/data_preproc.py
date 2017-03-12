@@ -14,13 +14,15 @@ import numpy as np
 import pickle
 import random
 try:
-    #import pylab
+    import pylab
     pylab_imported = True
 except:
     print("WARNING: won't be able to show images")
     pylab_imported = False
 from skimage import transform as tf, io, color, img_as_float
 import gzip
+import util
+import shutil
 
 #conversions from rgb to...
 COL_CVT_FUNCS = {
@@ -36,17 +38,34 @@ COL_DCVT_FUNCS = {
     "rgb": lambda x: x
 }
 
-#paths
-DATASET_PATH = "/local/erik/judd"
+#if dataset path isn't one in defaults (judd, cat2000, cssd, ecssd, mit_300),
+#then it must contain a dir named stimuli (with only stimuli images)
+#and a dir named ground_truth for ground-truths (with the same starting
+#names as its respectives stimuli).
+DATASET_PATH = "/home/erik/proj/ic/saliency_datasets/judd_cat2000"
+#name of dataset. it must be empty if not one in defaults.
+DATASET_NAME = os.path.basename(DATASET_PATH).lower()
+#output paths
 OUT_DATA_FILEPATH = "./data/juddtest.gz"
+OUT_DATA_STATS_FILEPATH = "./data/juddtest_stats.gz"
+#if below is set, overrides OUT_DATA_{,STATS_}FILEPATH and puts data along
+#with more info inside a directory created on dir specified by this variable.
+OUTPUT_DIR_BASEDIR = "./data"
 
 #show images
-SHOW_IMGS = False
-SHOW_CHANNELS = False
+SHOW_IMGS = not False
+SHOW_CHANNELS = not False
 
 #image shape
-X_SHAPE = (76, 100)
-Y_SHAPE = (38, 50)
+X_SHAPE = (80, 120)
+Y_SHAPE = (32, 48)
+
+#crop image to have final dimension's proportions before resizing.
+CROP_ON_RESIZE = True
+
+#end datatype
+X_DTYPE = np.float32
+Y_DTYPE = np.float32
 
 #float datatype
 X_IMG_TO_FLOAT = True
@@ -76,13 +95,13 @@ AFFINE_TRANSFORMS = [
 ]
 #gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
 #top left
-TL_CORNER = 0.666
+TL_CORNER = None#0.666
 #top right
-TR_CORNER = 0.666
+TR_CORNER = None#0.666
 #bottom left
-BL_CORNER = 0.666
+BL_CORNER = None#0.666
 #bottom right
-BR_CORNER = 0.666
+BR_CORNER = None#0.666
 
 def get_stimuli_paths(dataset_path, dataset_name=""):
     """
@@ -105,7 +124,8 @@ def get_stimuli_paths(dataset_path, dataset_name=""):
         filepaths = glob.glob(os.path.join(
             dataset_path, "BenchmarkIMAGES", "BenchmarkIMAGES", "SM", "*.jpg"))
     else:
-        raise ValueError("unknown dataset name '%s'" % dataset_name)
+        filepaths = glob.glob(os.path.join(dataset_path, "stimuli", "*"))
+        #raise ValueError("unknown dataset name '%s'" % dataset_name)
 
     return filepaths
 
@@ -138,12 +158,13 @@ def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
     elif dataset_name == "mit_300":
         raise ValueError("mit_300 has no saliency maps or ground truth masks")
     else:
-        raise ValueError("unknown dataset name '%s'" % dataset_name)
+        match = os.path.join(dataset_path, "ground_truth", stimulus_name + "*")
+        map_path = glob.glob(match)[0]
+        #raise ValueError("unknown dataset name '%s'" % dataset_name)
 
     return map_path
 
 def std_normalize(data):
-    print("data mean, std =", data.mean(), data.std())
     return (data - data.mean())/data.std()
 
 def unit_normalize(data):
@@ -173,10 +194,10 @@ def affine_tf(img, **kwargs):
     at = tf.AffineTransform(**kwargs)
     return tf.warp(img, at)
 
-def corner(img, frac, mode="tl"):
+def crop(img, x_frac, y_frac, mode="tl"):
     h, w = img.shape[:2]
-    x_cut = int(w*frac)
-    y_cut = int(h*frac)
+    x_cut = int(w*x_frac)
+    y_cut = int(h*y_frac)
 
     if mode == "tl":
         ret = img[:y_cut, :x_cut]
@@ -190,6 +211,9 @@ def corner(img, frac, mode="tl"):
         raise ValueError("no known mode '%s'" % mode)
 
     return ret
+
+def corner(img, frac, mode="tl"):
+    return crop(img, frac, frac, mode)
 
 def show_imgs(imgs, gray=False, grid_w=None):
     if gray:
@@ -246,11 +270,14 @@ def files_to_mtx():
     x = []
     y = []
 
-    for img_fp in get_stimuli_paths(DATASET_PATH):
+    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)):
         print("in", img_fp, "...")
 
         #reading image
         img = io.imread(img_fp, as_grey=False)
+        if len(img.shape) != 3:
+            print("\tconverting grayscale image to rgb")
+            img = color.gray2rgb(img)
         #converting colorspace if required
         if "rgb" != X_IMG_COLSPACE:
             img = COL_CVT_FUNCS[X_IMG_COLSPACE](img)
@@ -265,7 +292,8 @@ def files_to_mtx():
         x_imgs = [img]
 
         #reading respective ground truth
-        gt_fp = get_ground_truth_path(img_fp, DATASET_PATH)
+        gt_fp = get_ground_truth_path(img_fp, DATASET_PATH, DATASET_NAME)
+        print("\tground-truth filepath:", gt_fp)
         gt = io.imread(gt_fp, as_grey=True)
         #converting datatype if required
         if gt.dtype != np.float64 and Y_IMG_TO_FLOAT:
@@ -285,18 +313,28 @@ def files_to_mtx():
             print("\taugmented from 1 sample to %d" % len(x_imgs))
 
         #resizing if necessary
-        if img.shape[:2] != X_SHAPE:
-            old_shape = img.shape[:2]
-            for i in range(len(x_imgs)):
-                x_imgs[i] = tf.resize(x_imgs[i], X_SHAPE)
-            print("\tresized stimulus from {} to {}".format(
-                old_shape, x_imgs[-1].shape[:2]))
-        if gt.shape[:2] != Y_SHAPE:
-            old_shape = gt.shape[:2]
-            for i in range(len(y_imgs)):
-                y_imgs[i] = tf.resize(y_imgs[i], Y_SHAPE)
-            print("\tresized ground truth from {} to {}".format(
-                old_shape, y_imgs[-1].shape[:2]))
+        for imgs, shp, name in [[x_imgs, X_SHAPE, "x"], [y_imgs, Y_SHAPE, "y"]]:
+            if imgs[0].shape[:2] != shp:
+                old_shape = imgs[0].shape[:2]
+                if CROP_ON_RESIZE:
+                    crop_mode = "tl" if k%4 == 0 else ("tr" if k%4 == 1 else\
+                        ("bl" if k%4 == 2 else "br"))
+                    h1, w1 = imgs[0].shape[:2]
+                    h2, w2 = shp
+                    if w1/h1 > w2/h2:
+                        x_frac, y_frac = (h1*w2)/(h2*w1), 1
+                    elif w1/h1 < w2/h2:
+                        x_frac, y_frac = 1, (h2*w1)/(h1*w2)
+                    for i in range(len(imgs)):
+                        imgs[i] = crop(imgs[i], x_frac, y_frac, crop_mode)
+                    print(("\tcropped {}: x_frac: {:5f}, y_frac: {}, mode: {} "
+                        "from {} to {}").format(name, x_frac, y_frac, crop_mode,
+                            old_shape, imgs[-1].shape[:2]))
+                old_shape = imgs[0].shape[:2]
+                for i in range(len(imgs)):
+                    imgs[i] = tf.resize(imgs[i], shp)
+                print("\tresized {} from {} to {}".format(
+                    name, old_shape, imgs[-1].shape[:2]))
 
         #displaying images and maps if required
         if pylab_imported and SHOW_IMGS:
@@ -333,49 +371,85 @@ def files_to_mtx():
     ch_len = X_SHAPE[0]*X_SHAPE[1]
     n_channels = len(x_mtx[0])//ch_len
 
+    x_stats = []
+    y_stats = []
     #x normalization
     if X_NORMALIZATION is not None:
         if X_NORMALIZE_PER_CHANNEL:
             print("normalizing x_mtx per channel")
             for i in range(n_channels):
-                print("channel", i)
                 rng = slice(i*ch_len, (i+1)*ch_len)
+                ch = x_mtx[:, rng]
+                x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
+                print("x_mtx channel", i, "min, max, mean, std:",
+                    ch.min(), ch.max(), ch.mean(), ch.std(), ", normalizing...")
                 x_mtx[:, rng] = normalize(x_mtx[:, rng], X_NORMALIZATION)
         else:
-            print("normalizing x_mtx")
+            x_stats.append(
+                (x_mtx.min(), x_mtx.max(), x_mtx.mean(), x_mtx.std()))
+            print("x_mtx min, max, mean, std:", x_mtx.min(), x_mtx.max(),
+                x_mtx.mean(), x_mtx.std(), ", normalizing...")
             x_mtx = normalize(x_mtx, X_NORMALIZATION)
     #y normalization
     if Y_NORMALIZATION is not None:
-        print("normalizing y_mtx")
+        y_stats.append(
+            (y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std()))
+        print("y_mtx min, max, mean, std:", y_mtx.min(), y_mtx.max(),
+            y_mtx.mean(), y_mtx.std(), ", normalizing...")
         y_mtx = normalize(y_mtx, Y_NORMALIZATION)
 
     #shuffling data
-    print("shuffling data")
+    print("shuffling data...")
     indexes = np.arange(len(x))
     np.random.shuffle(indexes)
     x_mtx = x_mtx[indexes]
     y_mtx = y_mtx[indexes]
 
-    #some debug information
-    print("x_mtx min, max, mean, std:",
-        x_mtx.min(), x_mtx.max(), x_mtx.mean(), x_mtx.std())
-    for i in range(n_channels):
-        channel = x_mtx[:, i*ch_len:(i+1)*ch_len]
-        print("x_mtx channel", i, "min, max, mean, std:",
-            channel.min(), channel.max(), channel.mean(), channel.std())
-    print("y_mtx min, max, mean, std:",
-        y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std())
-    print("created x, y of shapes", x_mtx.shape, y_mtx.shape)
+    if x_mtx.dtype != X_DTYPE:
+        print("setting x_mtx dtype from {} to {}".format(x_mtx.dtype, X_DTYPE))
+        x_mtx = np.array(x_mtx, dtype=X_DTYPE)
+    if y_mtx.dtype != Y_DTYPE:
+        print("setting y_mtx dtype from {} to {}".format(y_mtx.dtype, Y_DTYPE))
+        y_mtx = np.array(y_mtx, dtype=Y_DTYPE)
 
-    return x_mtx, y_mtx
+    return x_mtx, y_mtx, x_stats, y_stats
+
+def save(data, filepath):
+    with gzip.open(filepath, "wb") as f:
+        pickle.dump(data, f)
+
+def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
+    #creating dir
+    out_dir = util.uniq_filepath(base_dir, pattern)
+    os.makedirs(out_dir)
+    #saving data
+    save((x, y), os.path.join(out_dir, "data.gz"))
+    #saving data stats
+    save((x_stats, y_stats), os.path.join(out_dir, "data_stats.gz"))
+    #info file
+    with open(os.path.join(out_dir, "info.txt"), "w") as f:
+        print("date created (y-m-d):", util.date_str(), file=f)
+        print("time created:", util.time_str(), file=f)
+        print("dataset name:", DATASET_NAME, file=f)
+        print("x shape:", x.shape, file=f)
+        print("y shape:", y.shape, file=f)
+    #copying generator script to dir
+    shutil.copy(__file__, os.path.join(out_dir, "gen_script.py"))
 
 def main():
     print("reading files...")
-    x, y = files_to_mtx()
+    x, y, x_stats, y_stats = files_to_mtx()
 
-    print("saving...")
-    with gzip.open(OUT_DATA_FILEPATH, "wb") as f:
-        pickle.dump((x, y), f)
+    if OUTPUT_DIR_BASEDIR is not None:
+        print("saving to directory in '%s'..." % OUTPUT_DIR_BASEDIR)
+        save_to_output_dir(x, y, x_stats, y_stats, OUTPUT_DIR_BASEDIR,
+            DATASET_NAME + "_dataset")
+    else:
+        print("saving data to '%s'..." % OUT_DATA_FILEPATH)
+        save((x, y), OUT_DATA_FILEPATH)
+        print("saving stats to '%s'..." % OUT_DATA_STATS_FILEPATH)
+        save((x_stats, y_stats), OUT_DATA_STATS_FILEPATH)
+
     print("done.")
 
 if __name__ == "__main__":

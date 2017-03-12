@@ -8,6 +8,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 from PIL import Image
+from skimage import color, transform as tf
 import lasagne
 import gzip
 import pickle
@@ -17,11 +18,11 @@ INPUT_SHAPE = (3, 76, 100)
 #these values are for judd benchmark.
 x_means_stds = [
     #channel 0
-   (45.5519397, 26.7712818), 
+   (45.5519397, 26.7712818),
     #channel 1
-   (1.6996536, 10.7172198), 
+   (1.6996536, 10.7172198),
     #channel 2
-   (5.4866930, 16.5665818) 
+   (5.4866930, 16.5665818)
 ]
 y_mean_std = (0.0513149, 0.1292755)
 
@@ -32,11 +33,12 @@ def swapax(img):
 def load_img(filepath):
     img = Image.open(filepath).convert("RGB")
     #if img.depth != 3:
-    #    raise ValueError("Must pass a RGB image") 
+    #    raise ValueError("Must pass a RGB image")
 
     img_shape = img.size[::-1]
     if img_shape != INPUT_SHAPE[1:]:
-        print("warning: resizing img from {} to {}".format(img_shape, INPUT_SHAPE))
+        print("warning: resizing img from {} to {}".format(img_shape,
+            INPUT_SHAPE))
         img = img.resize(INPUT_SHAPE[1::][::-1], Image.ANTIALIAS)
 
     img = np.asarray(img)
@@ -134,8 +136,8 @@ def main():
         exit()
 
     print("loading image...")
-    img = load_img(sys.argv[1])
-    img = img_pre_proc(img)
+    _img = load_img(sys.argv[1])
+    img = img_pre_proc(_img)
 
     print("predicting...")
     pred, pred_time = predict(img)
@@ -144,6 +146,30 @@ def main():
     print("saving to 'pred.pkl'...")
     with open("pred.pkl", "wb") as f:
         pickle.dump(pred, f)
+
+    pred = pred.reshape([x//2 for x in INPUT_SHAPE[1:]])
+    pred = (pred - pred.min())/(pred.max() - pred.min())
+    print(pred.shape, pred.min(), pred.max(), pred.mean(), pred.std())
+    pred = color.gray2rgb(pred)
+    pred = tf.resize(pred, INPUT_SHAPE[1:])
+
+    #_img = _img.copy()
+    #_img.setflags(write=1)
+    #_img[::5, :, :] = 0
+    #_img[:, ::5, :] = 0
+    try:
+        import pylab
+        print("displaying image...")
+        pylab.gray()
+        pylab.subplot(1, 2, 1)
+        pylab.axis("off")
+        pylab.imshow(_img)
+        pylab.subplot(1, 2, 2)
+        pylab.axis("off")
+        pylab.imshow(pred)
+        pylab.show()
+    except Exception:
+        print("WARNING: could not display image")
 
 if __name__ == '__main__':
     main()
