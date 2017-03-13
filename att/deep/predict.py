@@ -10,6 +10,7 @@ import theano.tensor as T
 from PIL import Image
 from skimage import color, transform as tf
 import lasagne
+from deep import build_cnn
 import gzip
 import pickle
 
@@ -106,60 +107,6 @@ def load_model(network, filepath):
     with np.load(filepath) as f:
         param_values = [f['arr_%d' % i] for i in range(len(f.files))]
         lasagne.layers.set_all_param_values(network, param_values)
-    return network
-
-def build_cnn(input_shape, input_var=None):
-    network = lasagne.layers.InputLayer(shape=input_shape,
-                                        input_var=input_var)
-
-    #input shape in form n_batches, depth, rows, cols
-    output_shape = OUTPUT_SHAPE
-
-    #input
-    network = lasagne.layers.InputLayer(shape=input_shape, input_var=input_var)
-
-    # Convolutional layer with 16 kernels of size 3x3. Strided and padded
-    # convolutions are supported as well; see the docstring.
-    #network = lasagne.layers.Conv2DLayer(
-    #        network, num_filters=8, filter_size=(3, 3),
-    #        nonlinearity=lasagne.nonlinearities.rectify,
-    #        W=lasagne.init.GlorotUniform())
-
-    # Max-pooling layer of factor 2 in both dimensions:
-    #network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
-    # Another convolution with 32 5x5 kernels, and another 2x2 pooling:
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=32, filter_size=(5, 5),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
-    # Another convolution with 32 5x5 kernels, and another 2x2 pooling:
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=48, filter_size=(5, 5),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
-    # Another convolution with 32 5x5 kernels, and another 2x2 pooling:
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=96, filter_size=(5, 5),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    #network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(3, 3))
-
-    # A fully-connected layer of x units with 50% dropout on its inputs:
-    network = lasagne.layers.DenseLayer(
-            lasagne.layers.dropout(network, p=.5),
-            #num_units=int(1.5*output_shape[0]*output_shape[1]),
-            num_units=int(1.618*output_shape[0]*output_shape[1]),
-            nonlinearity=lasagne.nonlinearities.rectify)
-
-    # And, finally, the 10-unit output layer with 50% dropout on its inputs:
-    network = lasagne.layers.DenseLayer(
-            lasagne.layers.dropout(network, p=.5),
-            num_units=output_shape[0]*output_shape[1],
-            nonlinearity=lasagne.nonlinearities.identity)
-
     return network
 
 def predict(img):
