@@ -53,8 +53,8 @@ OUT_DATA_STATS_FILEPATH = "./data/juddtest_stats.gz"
 OUTPUT_DIR_BASEDIR = "./data"
 
 #show images
-SHOW_IMGS = not False
-SHOW_CHANNELS = not False
+SHOW_IMGS = False
+SHOW_CHANNELS = False
 
 #image shape
 X_SHAPE = (80, 120)
@@ -64,8 +64,8 @@ Y_SHAPE = (32, 48)
 CROP_ON_RESIZE = True
 
 #end datatype
-X_DTYPE = np.float32
-Y_DTYPE = np.float32
+X_DTYPE = np.float64
+Y_DTYPE = np.float64
 
 #float datatype
 X_IMG_TO_FLOAT = True
@@ -95,13 +95,13 @@ AFFINE_TRANSFORMS = [
 ]
 #gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
 #top left
-TL_CORNER = None#0.666
+TL_CORNER = 0.666
 #top right
 TR_CORNER = None#0.666
 #bottom left
 BL_CORNER = None#0.666
 #bottom right
-BR_CORNER = None#0.666
+BR_CORNER = 0.666
 
 def get_stimuli_paths(dataset_path, dataset_name=""):
     """

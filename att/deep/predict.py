@@ -13,45 +13,94 @@ import lasagne
 import gzip
 import pickle
 
+#MODEL_FILEPATH = "./model_best_so_far_trainloss07863valloss08151.npz"
 MODEL_FILEPATH = "./model.npz"
-INPUT_SHAPE = (3, 76, 100)
-#these values are for judd benchmark.
-x_means_stds = [
-    #channel 0
-   (45.5519397, 26.7712818),
-    #channel 1
-   (1.6996536, 10.7172198),
-    #channel 2
-   (5.4866930, 16.5665818)
-]
-y_mean_std = (0.0513149, 0.1292755)
+#DATA_STATS_FILEPATH = "./stats.gz"
+DATA_STATS_FILEPATH = "/home/erik/proj/att/att/deep/data/"\
+    "judd_cat2000_dataset/data_stats.gz"
+INPUT_SHAPE = (3, 80, 120)#(3, 76, 100)
+OUTPUT_SHAPE = tuple(int(0.4*x) for x in INPUT_SHAPE[1:])#(38, 50)
+CROP_ON_RESIZE = True
 
 def swapax(img):
     """from shape (3, h, w) to (w, h, 3)"""
     return np.swapaxes(np.swapaxes(img, 0, 2), 1, 2)
 
+def _open(filepath, *args, **kwargs):
+    ext = filepath.split(".")[-1]
+    if ext == "gz":
+        fn = gzip.open
+    else:
+        fn = open
+    return fn(filepath, *args, **kwargs)
+
+def crop(img, x_frac, y_frac, mode="tl"):
+    h, w = img.shape[:2]
+    x_cut = int(w*x_frac)
+    y_cut = int(h*y_frac)
+
+    if mode == "tl":
+        ret = img[:y_cut, :x_cut]
+    elif mode == "tr":
+        ret = img[:y_cut, -x_cut:]
+    elif mode == "bl":
+        ret = img[-y_cut:, :x_cut]
+    elif mode == "br":
+        ret = img[-y_cut:, -x_cut:]
+    else:
+        raise ValueError("no known mode '%s'" % mode)
+
+    return ret
+
+def crop_to_shape(img, tgt_shp, mode="tl"):
+    h1, w1 = img.shape[:2]
+    h2, w2 = tgt_shp
+    if w1/h1 > w2/h2:
+        x_frac, y_frac = (h1*w2)/(h2*w1), 1
+    elif w1/h1 < w2/h2:
+        x_frac, y_frac = 1, (h2*w1)/(h1*w2)
+    return crop(img, x_frac, y_frac, mode)
+
 def load_img(filepath):
     img = Image.open(filepath).convert("RGB")
+    img = np.asarray(img)
     #if img.depth != 3:
     #    raise ValueError("Must pass a RGB image")
 
-    img_shape = img.size[::-1]
+    img = color.rgb2lab(img)
+
+    img_shape = img.shape[1:]
     if img_shape != INPUT_SHAPE[1:]:
         print("warning: resizing img from {} to {}".format(img_shape,
             INPUT_SHAPE))
-        img = img.resize(INPUT_SHAPE[1::][::-1], Image.ANTIALIAS)
+        if CROP_ON_RESIZE:
+            print("cropping before resizing")
+            img = crop_to_shape(img, INPUT_SHAPE[1:])
+        img = tf.resize(img, INPUT_SHAPE[1:])
 
-    img = np.asarray(img)
     return img
 
 def img_pre_proc(img):
-    r = (img[:, :, 0] - x_means_stds[0][0])/x_means_stds[0][1]
-    g = (img[:, :, 1] - x_means_stds[1][0])/x_means_stds[1][1]
-    b = (img[:, :, 2] - x_means_stds[2][0])/x_means_stds[2][1]
+    try:
+        x_stats, __ = load_data_stats(DATA_STATS_FILEPATH)
+    except:
+        with gzip.open(DATA_STATS_FILEPATH, "rb") as f:
+            x_stats = pickle.load(f)
+    if len(x_stats) == 3:
+        channels = []
+        for i in range(len(x_stats)):
+            minn, maxx, mean, std = x_stats[i]
+            channels.append((img[:, :, i] - mean)/std)
+        img = np.dstack(channels)
 
-    img = np.dstack((r, g, b))
     img = swapax(img)
+
     return img
+
+def load_data_stats(filepath):
+    with _open(filepath, "rb") as f:
+        x_stats, y_stats = pickle.load(f)
+    return x_stats, y_stats
 
 def load_model(network, filepath):
     with np.load(filepath) as f:
@@ -64,7 +113,7 @@ def build_cnn(input_shape, input_var=None):
                                         input_var=input_var)
 
     #input shape in form n_batches, depth, rows, cols
-    output_shape = input_shape[-2]//2, input_shape[-1]//2
+    output_shape = OUTPUT_SHAPE
 
     #input
     network = lasagne.layers.InputLayer(shape=input_shape, input_var=input_var)
@@ -95,12 +144,14 @@ def build_cnn(input_shape, input_var=None):
     network = lasagne.layers.Conv2DLayer(
             network, num_filters=96, filter_size=(5, 5),
             nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
+    #network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
+    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(3, 3))
 
     # A fully-connected layer of x units with 50% dropout on its inputs:
     network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
-            num_units=int(1.5*output_shape[0]*output_shape[1]),
+            #num_units=int(1.5*output_shape[0]*output_shape[1]),
+            num_units=int(1.618*output_shape[0]*output_shape[1]),
             nonlinearity=lasagne.nonlinearities.rectify)
 
     # And, finally, the 10-unit output layer with 50% dropout on its inputs:
@@ -147,7 +198,7 @@ def main():
     with open("pred.pkl", "wb") as f:
         pickle.dump(pred, f)
 
-    pred = pred.reshape([x//2 for x in INPUT_SHAPE[1:]])
+    pred = pred.reshape(OUTPUT_SHAPE)
     pred = (pred - pred.min())/(pred.max() - pred.min())
     print(pred.shape, pred.min(), pred.max(), pred.mean(), pred.std())
     pred = color.gray2rgb(pred)
@@ -163,7 +214,7 @@ def main():
         pylab.gray()
         pylab.subplot(1, 2, 1)
         pylab.axis("off")
-        pylab.imshow(_img)
+        pylab.imshow(color.lab2rgb(_img))
         pylab.subplot(1, 2, 2)
         pylab.axis("off")
         pylab.imshow(pred)

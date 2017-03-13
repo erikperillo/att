@@ -28,7 +28,7 @@ def _inf_gen():
 def train_loop(
     X_tr, y_tr, tr_f,
     n_epochs=10, batch_size=1,
-    X_val=None, y_val=None, val_f=None, val_acc_tol=None,
+    X_val=None, y_val=None, val_f=None, val_mae_tol=None,
     max_its=None,
     verbose=2):
     """
@@ -50,8 +50,8 @@ def train_loop(
         Validation output.
     val_f : callable or None
         Validation function giving a tuple of (loss, accuracy).
-    val_acc_tol : float or None
-        If difference of curr/last validations < val_acc_tol, stop.
+    val_mae_tol : float or None
+        If difference of curr/last validations < val_mae_tol, stop.
     max_its : int or None
         Maximum number of iterations.
     verbose : int
@@ -64,13 +64,13 @@ def train_loop(
 
     validation = X_val is not None and y_val is not None and val_f is not None
 
-    if not val_acc_tol and n_epochs is None and max_its is None:
+    if not val_mae_tol and n_epochs is None and max_its is None:
         warn("WARNING: training_loop will never stop since"
-            " val_acc_tol, n_epochs and max_its are all None")
+            " val_mae_tol, n_epochs and max_its are all None")
 
     n_tr_batches = len(y_tr)//batch_size
     n_val_batches = max(len(y_val)//batch_size, 1) if validation else None
-    last_val_acc = None
+    last_val_mae = None
     its = 0
     start_time = time.time()
 
@@ -103,30 +103,30 @@ def train_loop(
         tr_err /= n_tr_batches
 
         val_err = 0
-        val_acc = 0
+        val_mae = 0
         val_batch_n = 0
         if validation:
             for batch in _batches_gen(X_val, y_val, batch_size, False):
                 inputs, targets = batch
                 err, acc = val_f(inputs, targets)
                 val_err += err
-                val_acc += acc
+                val_mae += acc
                 val_batch_n += 1
                 info("\r    [val batch %d/%d] err: %.4g | acc: %f   " %\
                     (val_batch_n, n_val_batches, err, acc), end="")
             val_err /= n_val_batches
-            val_acc /= n_val_batches
+            val_mae /= n_val_batches
 
-            if last_val_acc is not None:
-                val_acc_diff = abs(val_acc - last_val_acc)
-                if val_acc_tol is not None and val_acc_diff < val_acc_tol:
-                    warn("\nWARNING: val_acc_diff=%f < val_acc_tol=%f" %\
-                        (val_acc_diff, val_acc_tol))
+            if last_val_mae is not None:
+                val_mae_diff = abs(val_mae - last_val_mae)
+                if val_mae_tol is not None and val_mae_diff < val_mae_tol:
+                    warn("\nWARNING: val_mae_diff=%f < val_mae_tol=%f" %\
+                        (val_mae_diff, val_mae_tol))
                     done_looping = True
-                    end_reason = "val_acc_tol"
+                    end_reason = "val_mae_tol"
                     return end_reason
 
-            last_val_acc = val_acc
+            last_val_mae = val_mae
 
         info("\r" + 64*" ", end="")
         info("\r    elapsed time so far: %s" %\
@@ -134,4 +134,4 @@ def train_loop(
         info("    train loss: %.4g" % (tr_err))
         if validation:
             info("    val loss: %.4g" % val_err, end="")
-            info(" | val accuracy: %.2f%%" % (val_acc*100))
+            info(" | val mae: %.4g" % val_mae)
