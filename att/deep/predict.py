@@ -4,13 +4,15 @@ import sys
 import os
 import time
 
+import model
+import util
+
 import numpy as np
 import theano
 import theano.tensor as T
 from PIL import Image
 from skimage import color, transform as tf
 import lasagne
-from deep import build_cnn
 import gzip
 import pickle
 
@@ -26,14 +28,6 @@ CROP_ON_RESIZE = True
 def swapax(img):
     """from shape (3, h, w) to (w, h, 3)"""
     return np.swapaxes(np.swapaxes(img, 0, 2), 1, 2)
-
-def _open(filepath, *args, **kwargs):
-    ext = filepath.split(".")[-1]
-    if ext == "gz":
-        fn = gzip.open
-    else:
-        fn = open
-    return fn(filepath, *args, **kwargs)
 
 def crop(img, x_frac, y_frac, mode="tl"):
     h, w = img.shape[:2]
@@ -99,28 +93,16 @@ def img_pre_proc(img):
     return img
 
 def load_data_stats(filepath):
-    with _open(filepath, "rb") as f:
-        x_stats, y_stats = pickle.load(f)
-    return x_stats, y_stats
-
-def load_model(network, filepath):
-    with np.load(filepath) as f:
-        param_values = [f['arr_%d' % i] for i in range(len(f.files))]
-        lasagne.layers.set_all_param_values(network, param_values)
-    return network
+    return util.unpickle(filepath)
 
 def predict(img):
-    inp = T.tensor4("inp")
-
-    # Create neural network model
-    _network = build_cnn((None,) + INPUT_SHAPE, inp)
-    network = load_model(_network, MODEL_FILEPATH)
-
-    pred = lasagne.layers.get_output(network, inputs=inp, deterministic=True)
-
-    pred_f = theano.function([inp], pred)
-
     img = img.reshape((1,) + img.shape)
+
+    inp = T.tensor4("inp")
+    #neural network model
+    net_model = model.Model(inp, load_net_from=MODEL_FILEPATH)
+    #prediction function
+    pred_f = theano.function([inp], net_model.test_pred)
 
     start_time = time.time()
     sal_map = pred_f(img)

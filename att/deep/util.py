@@ -1,5 +1,6 @@
 import os
 import datetime
+import pickle
 
 def time_str():
     """
@@ -33,3 +34,30 @@ def uniq_filepath(dir_path, pattern, ext=""):
     """
     dir_path = os.path.abspath(dir_path)
     return os.path.join(dir_path, uniq_filename(dir_path, pattern, ext))
+
+def get_ext(filepath, sep="."):
+    if not sep in filepath:
+        return ""
+    return filepath.split(sep)[-1]
+
+def open_mp(filepath, *args, **kwargs):
+    ext = get_ext(filepath)
+
+    if ext == "gz":
+        import gzip.open
+        open_f = gzip.open
+    elif ext == "bz2":
+        import bz2.open
+        open_f = bz2.open
+    else:
+        open_f = open
+
+    return open_f(filepath, *args, **args)
+
+def pickle(obj, filepath, protocol=4):
+    with open_mp(filepath, "wb") as f:
+        pickle.dump(obj, f, protocol=4)
+
+def unpickle(filepath):
+    with open_mp(filepath, "rb") as f:
+        return pickle.load(f)
