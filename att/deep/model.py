@@ -1,11 +1,13 @@
 import lasagne
+import numpy as np
+from theano import tensor as T
 
 class Model:
     #in format depth, rows, cols
     INPUT_SHAPE = (3, 80, 120)
-    OUTPUT_SHAPE = (1, 20, 30)
+    OUTPUT_SHAPE = (1, 32, 48)
 
-    def __init__(input_var=None, target_var=None, load_net_from=None):
+    def __init__(self, input_var=None, target_var=None, load_net_from=None):
         self.input_var = T.tensor4('inps') if input_var is None else input_var
         self.target_var = T.matrix('tgts') if target_var is None else target_var
 
@@ -36,18 +38,17 @@ class Model:
             self.train_loss, self.params, learning_rate=0.05, momentum=0.9)
 
         #mean absolute error
-        self.mae = T.mean(abs(self.test_prediction - target_var))
+        self.mae = T.mean(abs(self.test_pred - self.target_var))
 
-    def get_net_model(self, input_var=None):
+    def get_net_model(self, input_var=None, inp_shp=None):
         """
         Builds network.
         """
-        network = lasagne.layers.InputLayer(shape=INPUT_SHAPE,
-            input_var=input_var)
+        if inp_shp is None:
+            inp_shp = (None,) + Model.INPUT_SHAPE
 
         #input
-        network = lasagne.layers.InputLayer(shape=INPUT_SHAPE,
-            input_var=input_var)
+        network = lasagne.layers.InputLayer(shape=inp_shp, input_var=input_var)
 
         #convpool layer
         network = lasagne.layers.Conv2DLayer(
@@ -62,21 +63,21 @@ class Model:
         network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
 
         #convpool layer
-        network = lasagne.layers.Conv2DLayer(
-            network, num_filters=96, filter_size=(5, 5),
-            nonlinearity=lasagne.nonlinearities.rectify)
-        network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
+        #network = lasagne.layers.Conv2DLayer(
+        #    network, num_filters=96, filter_size=(5, 5),
+        #    nonlinearity=lasagne.nonlinearities.rectify)
+        #network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
 
         #fully connected
         network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
-            num_units=int(1.5*OUTPUT_SHAPE[1]*OUTPUT_SHAPE[2]),
+            num_units=int(1.5*Model.OUTPUT_SHAPE[1]*Model.OUTPUT_SHAPE[2]),
             nonlinearity=lasagne.nonlinearities.rectify)
 
         #output
         network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
-            num_units=OUTPUT_SHAPE[1]*OUTPUT_SHAPE[2],
+            num_units=Model.OUTPUT_SHAPE[1]*Model.OUTPUT_SHAPE[2],
             nonlinearity=lasagne.nonlinearities.identity)
 
         return network

@@ -4,16 +4,19 @@ import numpy as np
 import theano
 import theano.tensor as T
 import lasagne
+import shutil
+import os
 
 #local modules
 import model
 import trloop
 import util
 
-DATASET_FILEPATH = "./data/judd.gz"
+DATASET_FILEPATH = "./data/jud_cat200_short/data.gz"
+SAVE_DIR_BASE = "./data"
 
 def load_dataset(filepath):
-    return util.unpickle(filepath)
+    return util.unpkl(filepath)
 
 def tr_cv_te_split(X, y, cv_frac=0.2, te_frac=0.1):
     cv = int(cv_frac*len(y))
@@ -44,6 +47,19 @@ def load_formatted_dataset(filepath, cv_frac=0.2, te_frac=0.1):
 
     return X_tr, y_tr, X_cv, y_cv, X_te, y_te
 
+def save_to_output_dir(net_model, base_dir, pattern="trained_model"):
+    #creating dir
+    out_dir = util.uniq_filepath(base_dir, pattern)
+    os.makedirs(out_dir)
+    #saving data
+    net_model.save_net(os.path.join(out_dir, "model.npz"))
+    #info file
+    with open(os.path.join(out_dir, "info.txt"), "w") as f:
+        print("date created (y-m-d):", util.date_str(), file=f)
+        print("time created:", util.time_str(), file=f)
+    #copying model generator file to dir
+    shutil.copy(model.__file__, os.path.join(out_dir, "genmodel.py"))
+
 def main():
     X_tr, y_tr, X_cv, y_cv, X_te, y_te = load_formatted_dataset(
         DATASET_FILEPATH, cv_frac=0.1, te_frac=0.01)
@@ -66,21 +82,23 @@ def main():
         [net_model.test_loss, net_model.mae])
 
     print("calling loop")
-    trloop.train_loop(
-        X_tr, y_tr, train_fn,
-        n_epochs=32, batch_size=20,
-        X_val=X_cv, y_val=y_cv, val_f=val_fn,
-        val_mae_tol=None,
-        max_its=None,
-        verbose=2)
+    try:
+        trloop.train_loop(
+            X_tr, y_tr, train_fn,
+            n_epochs=32, batch_size=20,
+            X_val=X_cv, y_val=y_cv, val_f=val_fn,
+            val_mae_tol=None,
+            max_its=None,
+            verbose=2)
+    except KeyboardInterrupt:
+        print("Keyboard Interrupt event.")
     print("end.")
 
     err, mae = val_fn(X_te, y_te)
     print("test loss: %f | test mae: %f" % (err, mae))
 
-    save_path = "model.npz"
-    print("saving model to '%s'..." % save_path)
-    net_model.save_net(save_path)
+    print("saving model dir to '%s'..." % SAVE_DIR_BASE)
+    save_to_output_dir(net_model, SAVE_DIR_BASE)
 
 if __name__ == '__main__':
     main()

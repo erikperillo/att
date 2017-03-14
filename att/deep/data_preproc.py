@@ -57,8 +57,15 @@ SHOW_IMGS = False
 SHOW_CHANNELS = False
 
 #image shape
-X_SHAPE = (80, 120)
-Y_SHAPE = (32, 48)
+try:
+    import model
+    X_SHAPE = model.Model.INPUT_SHAPE[1:]
+    Y_SHAPE = model.Model.OUTPUT_SHAPE[1:]
+    print("getting X_SHAPE and Y_SHAPE from module 'model'")
+except:
+    print("WARNING: could not import model module to get input/output shapes")
+    X_SHAPE = (80, 120)
+    Y_SHAPE = (32, 48)
 
 #crop image to have final dimension's proportions before resizing.
 CROP_ON_RESIZE = True
@@ -83,7 +90,7 @@ X_IMG_COLSPACE = "lab"
 SWAP_CHANNEL_AXIS = True
 
 #augmentation techniques
-AUGMENT = True
+AUGMENT = False#True
 #flip horizontally/vertically
 HOR_MIRROR = True
 VER_MIRROR = False
@@ -95,13 +102,13 @@ AFFINE_TRANSFORMS = [
 ]
 #gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
 #top left
-TL_CORNER = 0.666
+TL_CORNER = None#0.666
 #top right
 TR_CORNER = None#0.666
 #bottom left
 BL_CORNER = None#0.666
 #bottom right
-BR_CORNER = 0.666
+BR_CORNER = None#0.666
 
 def get_stimuli_paths(dataset_path, dataset_name=""):
     """
@@ -270,7 +277,7 @@ def files_to_mtx():
     x = []
     y = []
 
-    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)):
+    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)[:256]):
         print("in", img_fp, "...")
 
         #reading image

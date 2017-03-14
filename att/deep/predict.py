@@ -4,7 +4,6 @@ import sys
 import os
 import time
 
-import model
 import util
 
 import numpy as np
@@ -16,14 +15,17 @@ import lasagne
 import gzip
 import pickle
 
-#MODEL_FILEPATH = "./model_best_so_far_trainloss07863valloss08151.npz"
-MODEL_FILEPATH = "./model.npz"
-#DATA_STATS_FILEPATH = "./stats.gz"
+MODEL_DIR_FILEPATH = "./data/trained_model_1"
+MODEL_FILEPATH = os.path.join(MODEL_DIR_FILEPATH, "model.npz")
 DATA_STATS_FILEPATH = "/home/erik/proj/att/att/deep/data/"\
     "judd_cat2000_dataset/data_stats.gz"
-INPUT_SHAPE = (3, 80, 120)#(3, 76, 100)
-OUTPUT_SHAPE = tuple(int(0.4*x) for x in INPUT_SHAPE[1:])#(38, 50)
 CROP_ON_RESIZE = True
+
+if not MODEL_DIR_FILEPATH:
+    import model
+else:
+    sys.path.append(MODEL_DIR_FILEPATH)
+    import genmodel as model
 
 def swapax(img):
     """from shape (3, h, w) to (w, h, 3)"""
@@ -65,13 +67,13 @@ def load_img(filepath):
     img = color.rgb2lab(img)
 
     img_shape = img.shape[1:]
-    if img_shape != INPUT_SHAPE[1:]:
+    if img_shape != model.Model.INPUT_SHAPE[1:]:
         print("warning: resizing img from {} to {}".format(img_shape,
-            INPUT_SHAPE))
+            model.Model.INPUT_SHAPE))
         if CROP_ON_RESIZE:
             print("cropping before resizing")
-            img = crop_to_shape(img, INPUT_SHAPE[1:])
-        img = tf.resize(img, INPUT_SHAPE[1:])
+            img = crop_to_shape(img, model.Model.INPUT_SHAPE[1:])
+        img = tf.resize(img, model.Model.INPUT_SHAPE[1:])
 
     return img
 
@@ -127,11 +129,12 @@ def main():
     with open("pred.pkl", "wb") as f:
         pickle.dump(pred, f)
 
-    pred = pred.reshape(OUTPUT_SHAPE)
+    pred = pred.reshape(model.Model.OUTPUT_SHAPE[1:])
     pred = (pred - pred.min())/(pred.max() - pred.min())
     print(pred.shape, pred.min(), pred.max(), pred.mean(), pred.std())
     pred = color.gray2rgb(pred)
-    pred = tf.resize(pred, INPUT_SHAPE[1:])
+    print(pred.shape, model.Model.INPUT_SHAPE)
+    pred = tf.resize(pred, model.Model.INPUT_SHAPE[1:])
 
     #_img = _img.copy()
     #_img.setflags(write=1)

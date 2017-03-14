@@ -36,28 +36,39 @@ def uniq_filepath(dir_path, pattern, ext=""):
     return os.path.join(dir_path, uniq_filename(dir_path, pattern, ext))
 
 def get_ext(filepath, sep="."):
-    if not sep in filepath:
+    """
+    Gets extension of file given a filepath.
+    """
+    filename = os.path.basename(filepath.rstrip("/"))
+    if not sep in filename:
         return ""
-    return filepath.split(sep)[-1]
+    return filename.split(sep)[-1]
 
 def open_mp(filepath, *args, **kwargs):
+    """
+    Opens file with multiple protocols (gzip, bzip2...).
+    """
     ext = get_ext(filepath)
-
     if ext == "gz":
-        import gzip.open
+        import gzip
         open_f = gzip.open
     elif ext == "bz2":
-        import bz2.open
+        import bz2
         open_f = bz2.open
     else:
         open_f = open
+    return open_f(filepath, *args, **kwargs)
 
-    return open_f(filepath, *args, **args)
-
-def pickle(obj, filepath, protocol=4):
+def pkl(obj, filepath, protocol=4):
+    """
+    Saves object using pickle.
+    """
     with open_mp(filepath, "wb") as f:
-        pickle.dump(obj, f, protocol=4)
+        pickle.dump(obj, f, protocol=protocol)
 
-def unpickle(filepath):
+def unpkl(filepath):
+    """
+    Loads object using pickle.
+    """
     with open_mp(filepath, "rb") as f:
         return pickle.load(f)
