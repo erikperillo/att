@@ -24,6 +24,9 @@ import gzip
 import util
 import shutil
 
+#seed to be used by random module
+RAND_SEED = 42
+
 #conversions from rgb to...
 COL_CVT_FUNCS = {
     "lab": color.rgb2lab,
@@ -53,8 +56,8 @@ OUT_DATA_STATS_FILEPATH = "./data/juddtest_stats.gz"
 OUTPUT_DIR_BASEDIR = "./data"
 
 #show images
-SHOW_IMGS = False
-SHOW_CHANNELS = False
+SHOW_IMGS = not False
+SHOW_CHANNELS = not False
 
 #image shape
 try:
@@ -90,9 +93,9 @@ X_IMG_COLSPACE = "lab"
 SWAP_CHANNEL_AXIS = True
 
 #augmentation techniques
-AUGMENT = False#True
+AUGMENT = True
 #flip horizontally/vertically
-HOR_MIRROR = True
+HOR_MIRROR = False
 VER_MIRROR = False
 #rotations, translations, etc
 AFFINE_TRANSFORMS = [
@@ -102,15 +105,15 @@ AFFINE_TRANSFORMS = [
 ]
 #gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
 #top left
-TL_CORNER = None#0.666
+TL_CORNER = 0.666
 #top right
 TR_CORNER = None#0.666
 #bottom left
 BL_CORNER = None#0.666
 #bottom right
-BR_CORNER = None#0.666
+BR_CORNER = 0.666
 
-def get_stimuli_paths(dataset_path, dataset_name=""):
+def get_stimuli_paths(dataset_path, dataset_name="", shuffle=True):
     """
     Gets list of stimuli paths given a dataset path.
     Assumes a certain directory structure given the dataset.
@@ -134,6 +137,8 @@ def get_stimuli_paths(dataset_path, dataset_name=""):
         filepaths = glob.glob(os.path.join(dataset_path, "stimuli", "*"))
         #raise ValueError("unknown dataset name '%s'" % dataset_name)
 
+    if shuffle:
+        random.shuffle(filepaths)
     return filepaths
 
 def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
@@ -277,7 +282,7 @@ def files_to_mtx():
     x = []
     y = []
 
-    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)[:256]):
+    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)):
         print("in", img_fp, "...")
 
         #reading image
@@ -444,6 +449,8 @@ def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
     shutil.copy(__file__, os.path.join(out_dir, "gen_script.py"))
 
 def main():
+    random.seed(RAND_SEED)
+
     print("reading files...")
     x, y, x_stats, y_stats = files_to_mtx()
 
