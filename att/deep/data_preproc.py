@@ -14,7 +14,7 @@ import numpy as np
 import pickle
 import random
 try:
-    import pylab
+    #import pylab
     pylab_imported = True
 except:
     print("WARNING: won't be able to show images")
@@ -45,7 +45,7 @@ COL_DCVT_FUNCS = {
 #then it must contain a dir named stimuli (with only stimuli images)
 #and a dir named ground_truth for ground-truths (with the same starting
 #names as its respectives stimuli).
-DATASET_PATH = "/home/erik/proj/ic/saliency_datasets/judd_cat2000"
+DATASET_PATH = "/home/erik/judd_cat2000"
 #name of dataset. it must be empty if not one in defaults.
 DATASET_NAME = os.path.basename(DATASET_PATH).lower()
 #output paths

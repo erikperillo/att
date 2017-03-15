@@ -4,6 +4,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 import lasagne
+import random
 import shutil
 import os
 
@@ -12,7 +13,7 @@ import model
 import trloop
 import util
 
-DATASET_FILEPATH = "./data/jud_cat200_short/data.gz"
+DATASET_FILEPATH = "./data/judd_cat2000_dataset_1/data.gz"
 SAVE_DIR_BASE = "./data"
 
 def load_dataset(filepath):
@@ -47,7 +48,8 @@ def load_formatted_dataset(filepath, cv_frac=0.2, te_frac=0.1):
 
     return X_tr, y_tr, X_cv, y_cv, X_te, y_te
 
-def save_to_output_dir(net_model, base_dir, pattern="trained_model"):
+def save_to_output_dir(net_model, base_dir, gen_script_copy,
+    pattern="trained_model"):
     #creating dir
     out_dir = util.uniq_filepath(base_dir, pattern)
     os.makedirs(out_dir)
@@ -58,11 +60,19 @@ def save_to_output_dir(net_model, base_dir, pattern="trained_model"):
         print("date created (y-m-d):", util.date_str(), file=f)
         print("time created:", util.time_str(), file=f)
     #copying model generator file to dir
-    shutil.copy(model.__file__, os.path.join(out_dir, "genmodel.py"))
+    shutil.move(gen_script_copy, os.path.join(out_dir, "genmodel.py"))
+
+def rand_fn(size=16):
+    fn = "".join(random.choice("abcdefghijklmnopkrstuvwxyz") for __ in range(size))
+    return fn + ".py"
 
 def main():
     X_tr, y_tr, X_cv, y_cv, X_te, y_te = load_formatted_dataset(
         DATASET_FILEPATH, cv_frac=0.1, te_frac=0.01)
+
+    #copying model file
+    gen_script = rand_fn()
+    shutil.copy(model.__file__, gen_script)
 
     #theano variables for inputs and targets
     input_var = T.tensor4('inputs')
@@ -85,7 +95,7 @@ def main():
     try:
         trloop.train_loop(
             X_tr, y_tr, train_fn,
-            n_epochs=32, batch_size=20,
+            n_epochs=20, batch_size=8,
             X_val=X_cv, y_val=y_cv, val_f=val_fn,
             val_mae_tol=None,
             max_its=None,
@@ -98,7 +108,7 @@ def main():
     print("test loss: %f | test mae: %f" % (err, mae))
 
     print("saving model dir to '%s'..." % SAVE_DIR_BASE)
-    save_to_output_dir(net_model, SAVE_DIR_BASE)
+    save_to_output_dir(net_model, SAVE_DIR_BASE, gen_script)
 
 if __name__ == '__main__':
     main()
