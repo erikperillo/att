@@ -14,7 +14,7 @@ import numpy as np
 import pickle
 import random
 try:
-    import pylab
+    #import pylab
     pylab_imported = True
 except:
     print("WARNING: won't be able to show images")
@@ -42,7 +42,7 @@ COL_DCVT_FUNCS = {
 #then it must contain a dir named stimuli (with only stimuli images)
 #and a dir named ground_truth for ground-truths (with the same starting
 #names as its respectives stimuli).
-DATASET_PATH = "/home/erik/proj/ic/saliency_datasets/judd_cat2000"
+DATASET_PATH = "/home/erik/judd_cat2000"
 #name of dataset. it must be empty if not one in defaults.
 DATASET_NAME = os.path.basename(DATASET_PATH).lower()
 #output paths
@@ -90,9 +90,9 @@ X_IMG_COLSPACE = "lab"
 SWAP_CHANNEL_AXIS = True
 
 #augmentation techniques
-AUGMENT = False#True
+AUGMENT = True
 #flip horizontally/vertically
-HOR_MIRROR = True
+HOR_MIRROR = False
 VER_MIRROR = False
 #rotations, translations, etc
 AFFINE_TRANSFORMS = [
@@ -102,13 +102,13 @@ AFFINE_TRANSFORMS = [
 ]
 #gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
 #top left
-TL_CORNER = None#0.666
+TL_CORNER = 0.666
 #top right
 TR_CORNER = None#0.666
 #bottom left
 BL_CORNER = None#0.666
 #bottom right
-BR_CORNER = None#0.666
+BR_CORNER = 0.666
 
 def get_stimuli_paths(dataset_path, dataset_name=""):
     """
@@ -277,7 +277,7 @@ def files_to_mtx():
     x = []
     y = []
 
-    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)[:256]):
+    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)):
         print("in", img_fp, "...")
 
         #reading image
