@@ -30,7 +30,7 @@ def train_loop(
     n_epochs=10, batch_size=1,
     X_val=None, y_val=None, val_f=None, val_mae_tol=None,
     max_its=None,
-    verbose=2):
+    verbose=2, print_f=print):
     """
     General Training loop.
     Parameters:
@@ -49,7 +49,7 @@ def train_loop(
     y_val : numpy ndarray or None
         Validation output.
     val_f : callable or None
-        Validation function giving a tuple of (loss, accuracy).
+        Validation function giving a tuple of (loss, mae).
     val_mae_tol : float or None
         If difference of curr/last validations < val_mae_tol, stop.
     max_its : int or None
@@ -59,8 +59,8 @@ def train_loop(
     """
 
     #info/warning functions
-    info = print if verbose >= 2 else lambda *args, **kwargs: None
-    warn = print if verbose >= 1 else lambda *args, **kwargs: None
+    info = print_f if verbose >= 2 else lambda *args, **kwargs: None
+    warn = print_f if verbose >= 1 else lambda *args, **kwargs: None
 
     validation = X_val is not None and y_val is not None and val_f is not None
 
@@ -112,7 +112,7 @@ def train_loop(
                 val_err += err
                 val_mae += acc
                 val_batch_n += 1
-                info("\r    [val batch %d/%d] err: %.4g | acc: %f   " %\
+                info("\r    [val batch %d/%d] err: %.4g | mae: %f   " %\
                     (val_batch_n, n_val_batches, err, acc), end="")
             val_err /= n_val_batches
             val_mae /= n_val_batches
@@ -131,7 +131,7 @@ def train_loop(
         info("\r" + 64*" ", end="")
         info("\r    elapsed time so far: %s" %\
             _str_fmt_time(time.time() - start_time))
-        info("    train loss: %.4g" % (tr_err))
+        info("    train err: %.4g" % (tr_err))
         if validation:
-            info("    val loss: %.4g" % val_err, end="")
+            info("    val err: %.4g" % val_err, end="")
             info(" | val mae: %.4g" % val_mae)

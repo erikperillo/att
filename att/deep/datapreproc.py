@@ -14,38 +14,21 @@ import numpy as np
 import pickle
 import random
 try:
-    #import pylab
+    import pylab
     pylab_imported = True
 except:
-    print("WARNING: won't be able to show images")
+    print("WARNING: failed to import pylab, won't be able to show images")
     pylab_imported = False
 from skimage import transform as tf, io, color, img_as_float
 import gzip
 import util
 import shutil
 
-#seed to be used by random module
-RAND_SEED = 42
-
-#conversions from rgb to...
-COL_CVT_FUNCS = {
-    "lab": color.rgb2lab,
-    "hsv": color.rgb2hsv,
-    "luv": color.rgb2luv
-}
-#converting back from ... to rgb
-COL_DCVT_FUNCS = {
-    "lab": color.lab2rgb,
-    "hsv": color.hsv2rgb,
-    "luv": color.luv2rgb,
-    "rgb": lambda x: x
-}
-
 #if dataset path isn't one in defaults (judd, cat2000, cssd, ecssd, mit_300),
 #then it must contain a dir named stimuli (with only stimuli images)
 #and a dir named ground_truth for ground-truths (with the same starting
 #names as its respectives stimuli).
-DATASET_PATH = "/home/erik/judd_cat2000"
+DATASET_PATH = "/home/erik/proj/ic/saliency_datasets/judd_cat2000"
 #name of dataset. it must be empty if not one in defaults.
 DATASET_NAME = os.path.basename(DATASET_PATH).lower()
 #output paths
@@ -55,20 +38,16 @@ OUT_DATA_STATS_FILEPATH = "./data/juddtest_stats.gz"
 #with more info inside a directory created on dir specified by this variable.
 OUTPUT_DIR_BASEDIR = "./data"
 
+#maximum number of samples to use, if None use all
+MAX_SAMPLES = 10
+
 #show images
-SHOW_IMGS = not False
-SHOW_CHANNELS = not False
+SHOW_IMGS = False
+SHOW_CHANNELS = False
 
 #image shape
-try:
-    import model
-    X_SHAPE = model.Model.INPUT_SHAPE[1:]
-    Y_SHAPE = model.Model.OUTPUT_SHAPE[1:]
-    print("getting X_SHAPE and Y_SHAPE from module 'model'")
-except:
-    print("WARNING: could not import model module to get input/output shapes")
-    X_SHAPE = (80, 120)
-    Y_SHAPE = (32, 48)
+X_SHAPE = (80, 120)
+Y_SHAPE = (20, 30)
 
 #crop image to have final dimension's proportions before resizing.
 CROP_ON_RESIZE = True
@@ -93,7 +72,7 @@ X_IMG_COLSPACE = "lab"
 SWAP_CHANNEL_AXIS = True
 
 #augmentation techniques
-AUGMENT = True
+AUGMENT = False
 #flip horizontally/vertically
 HOR_MIRROR = False
 VER_MIRROR = False
@@ -112,6 +91,23 @@ TR_CORNER = None#0.666
 BL_CORNER = None#0.666
 #bottom right
 BR_CORNER = 0.666
+
+#conversions from rgb to...
+col_cvt_funcs = {
+    "lab": color.rgb2lab,
+    "hsv": color.rgb2hsv,
+    "luv": color.rgb2luv
+}
+#converting back from ... to rgb
+col_dcvt_funcs = {
+    "lab": color.lab2rgb,
+    "hsv": color.hsv2rgb,
+    "luv": color.luv2rgb,
+    "rgb": lambda x: x
+}
+
+#seed to be used by random module
+RAND_SEED = 42
 
 def get_stimuli_paths(dataset_path, dataset_name="", shuffle=True):
     """
@@ -282,7 +278,8 @@ def files_to_mtx():
     x = []
     y = []
 
-    for k, img_fp in enumerate(get_stimuli_paths(DATASET_PATH, DATASET_NAME)):
+    paths = get_stimuli_paths(DATASET_PATH, DATASET_NAME)[slice(0, MAX_SAMPLES)]
+    for k, img_fp in enumerate(paths):
         print("in", img_fp, "...")
 
         #reading image
@@ -292,7 +289,7 @@ def files_to_mtx():
             img = color.gray2rgb(img)
         #converting colorspace if required
         if "rgb" != X_IMG_COLSPACE:
-            img = COL_CVT_FUNCS[X_IMG_COLSPACE](img)
+            img = col_cvt_funcs[X_IMG_COLSPACE](img)
             print("\tconverted colspace from rgb to", X_IMG_COLSPACE)
         #converting datatype if required
         if img.dtype != np.float64 and X_IMG_TO_FLOAT:
@@ -350,7 +347,7 @@ def files_to_mtx():
 
         #displaying images and maps if required
         if pylab_imported and SHOW_IMGS:
-            show_imgs([COL_DCVT_FUNCS[X_IMG_COLSPACE](x) for x in x_imgs] + \
+            show_imgs([col_dcvt_funcs[X_IMG_COLSPACE](x) for x in x_imgs] + \
                 y_imgs)
         #displaying separate channels and maps if required
         if pylab_imported and SHOW_CHANNELS:
@@ -426,18 +423,14 @@ def files_to_mtx():
 
     return x_mtx, y_mtx, x_stats, y_stats
 
-def save(data, filepath):
-    with gzip.open(filepath, "wb") as f:
-        pickle.dump(data, f)
-
 def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
     #creating dir
     out_dir = util.uniq_filepath(base_dir, pattern)
     os.makedirs(out_dir)
     #saving data
-    save((x, y), os.path.join(out_dir, "data.gz"))
+    util.pkl((x, y), os.path.join(out_dir, "data.gz"))
     #saving data stats
-    save((x_stats, y_stats), os.path.join(out_dir, "data_stats.gz"))
+    util.pkl((x_stats, y_stats), os.path.join(out_dir, "data_stats.gz"))
     #info file
     with open(os.path.join(out_dir, "info.txt"), "w") as f:
         print("date created (y-m-d):", util.date_str(), file=f)
@@ -445,8 +438,16 @@ def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
         print("dataset name:", DATASET_NAME, file=f)
         print("x shape:", x.shape, file=f)
         print("y shape:", y.shape, file=f)
-    #copying generator script to dir
-    shutil.copy(__file__, os.path.join(out_dir, "gen_script.py"))
+        print("git commit hash:", util.git_hash(), file=f)
+        #print(file=f)
+        #print("--- script uppercase globals ---", file=f)
+        #for k, v in globals().items():
+        #    if k.isupper():
+        #        print("{} : {}".format(k, v), file=f)
+
+    shutil.copy(__file__, os.path.join(out_dir, "genscript.py"))
+
+    return out_dir
 
 def main():
     random.seed(RAND_SEED)
@@ -455,14 +456,14 @@ def main():
     x, y, x_stats, y_stats = files_to_mtx()
 
     if OUTPUT_DIR_BASEDIR is not None:
-        print("saving to directory in '%s'..." % OUTPUT_DIR_BASEDIR)
-        save_to_output_dir(x, y, x_stats, y_stats, OUTPUT_DIR_BASEDIR,
+        out_dir = save_to_output_dir(x, y, x_stats, y_stats, OUTPUT_DIR_BASEDIR,
             DATASET_NAME + "_dataset")
+        print("saved dataset, info, stats to '%s'" % out_dir)
     else:
         print("saving data to '%s'..." % OUT_DATA_FILEPATH)
-        save((x, y), OUT_DATA_FILEPATH)
+        util.pkl((x, y), OUT_DATA_FILEPATH)
         print("saving stats to '%s'..." % OUT_DATA_STATS_FILEPATH)
-        save((x_stats, y_stats), OUT_DATA_STATS_FILEPATH)
+        util.pkl((x_stats, y_stats), OUT_DATA_STATS_FILEPATH)
 
     print("done.")
 

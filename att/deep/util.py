@@ -1,6 +1,17 @@
 import os
+import sys
 import datetime
+import importlib.util as imputil
+import subprocess as sp
 import pickle
+
+def git_hash():
+    try:
+        hsh = sp.getoutput("git rev-parse HEAD").strip("\n")
+    except:
+        hsh = ""
+
+    return hsh
 
 def time_str():
     """
@@ -72,3 +83,44 @@ def unpkl(filepath):
     """
     with open_mp(filepath, "rb") as f:
         return pickle.load(f)
+
+def txt_to_dict(info_file_path, sep=":"):
+    """
+    Gets a path to a text file with lines in format key: value and returns dict.
+    """
+    with open(info_file_path) as f:
+        lines = [l.strip() for l in f]
+    pairs = filter(lambda x: x, lines)
+    pairs = (l.split(sep) for l in pairs)
+    pairs = ((k.strip(), v.strip()) for k, v in pairs)
+    return dict(pairs)
+
+def module_from_src_file(filepath):
+    """
+    Imports a module from an arbitrary filepath.
+    """
+    module_name = os.path.basename(filepath)
+    if not module_name.endswith(".py"):
+        raise ValueError("module file must end with .py")
+    module_name = "".join(module_name.split(".")[:-1])
+    spec = imputil.spec_from_file_location(module_name, filepath)
+    module = imputil.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+class Tee:
+    """
+    Broadcasts print message through list of open files.
+    """
+    def __init__(self, files):
+        self.files = files
+
+    def print(self, *args, **kwargs):
+        for f in self.files:
+            kwargs["file"] = f
+            print(*args, **kwargs)
+
+    def __del__(self):
+        for f in self.files:
+            if f != sys.stdout and f != sys.stderr:
+                f.close()

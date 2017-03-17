@@ -15,57 +15,54 @@ import lasagne
 import gzip
 import pickle
 
-MODEL_DIR_FILEPATH = "./data/trained_model_1"
-MODEL_FILEPATH = os.path.join(MODEL_DIR_FILEPATH, "model.npz")
-DATA_STATS_FILEPATH = "/home/erik/proj/att/att/deep/data/"\
-    "judd_cat2000_dataset/data_stats.gz"
+#options:
+#directory where model is stored
+MODEL_DIRPATH = "./data/trained_model_11"
+#paths to model/stats
+MODEL_FILEPATH = os.path.join(MODEL_DIRPATH, "model.npz")
+DATA_STATS_FILEPATH = os.path.join(MODEL_DIRPATH, "stats.gz")
+#crops image to have target's aspect ratio before resizing
 CROP_ON_RESIZE = True
 
-if not MODEL_DIR_FILEPATH:
-    import model
-else:
-    sys.path.append(MODEL_DIR_FILEPATH)
+#imports model from code on MODEL_DIRPATH if it's specified
+if MODEL_DIRPATH:
+    sys.path.append(MODEL_DIRPATH)
     import genmodel as model
+    import gendatapreproc as preproc
+else:
+    import model
+    import datapreproc as preproc
 
 def swapax(img):
-    """from shape (3, h, w) to (w, h, 3)"""
+    """
+    From shape (3, h, w) to (w, h, 3).
+    """
     return np.swapaxes(np.swapaxes(img, 0, 2), 1, 2)
 
-def crop(img, x_frac, y_frac, mode="tl"):
-    h, w = img.shape[:2]
-    x_cut = int(w*x_frac)
-    y_cut = int(h*y_frac)
-
-    if mode == "tl":
-        ret = img[:y_cut, :x_cut]
-    elif mode == "tr":
-        ret = img[:y_cut, -x_cut:]
-    elif mode == "bl":
-        ret = img[-y_cut:, :x_cut]
-    elif mode == "br":
-        ret = img[-y_cut:, -x_cut:]
-    else:
-        raise ValueError("no known mode '%s'" % mode)
-
-    return ret
-
 def crop_to_shape(img, tgt_shp, mode="tl"):
+    """
+    Crops img so as to have the same aspect ratio as tgt_shp.
+    """
     h1, w1 = img.shape[:2]
     h2, w2 = tgt_shp
     if w1/h1 > w2/h2:
         x_frac, y_frac = (h1*w2)/(h2*w1), 1
     elif w1/h1 < w2/h2:
         x_frac, y_frac = 1, (h2*w1)/(h1*w2)
-    return crop(img, x_frac, y_frac, mode)
+    return preproc.crop(img, x_frac, y_frac, mode)
 
 def load_img(filepath):
+    """
+    Loads image in RGB format from filepath.
+    """
     img = Image.open(filepath).convert("RGB")
     img = np.asarray(img)
-    #if img.depth != 3:
-    #    raise ValueError("Must pass a RGB image")
+    return img
 
-    img = color.rgb2lab(img)
+def img_pre_proc(img):
+    norm_f = lambda x: preproc.normalize(x, method=preproc.X_NORMALIZATION)
 
+    #resizing if needed
     img_shape = img.shape[1:]
     if img_shape != model.Model.INPUT_SHAPE[1:]:
         print("warning: resizing img from {} to {}".format(img_shape,
@@ -75,20 +72,17 @@ def load_img(filepath):
             img = crop_to_shape(img, model.Model.INPUT_SHAPE[1:])
         img = tf.resize(img, model.Model.INPUT_SHAPE[1:])
 
-    return img
-
-def img_pre_proc(img):
-    try:
-        x_stats, __ = load_data_stats(DATA_STATS_FILEPATH)
-    except:
-        with gzip.open(DATA_STATS_FILEPATH, "rb") as f:
-            x_stats = pickle.load(f)
-    if len(x_stats) == 3:
+    #normalizing image
+    x_stats, __ = util.unpkl(DATA_STATS_FILEPATH)
+    if preproc.X_NORMALIZE_PER_CHANNEL:
         channels = []
         for i in range(len(x_stats)):
             minn, maxx, mean, std = x_stats[i]
-            channels.append((img[:, :, i] - mean)/std)
+            channels.append(norm_f(img[:, :, i]))
         img = np.dstack(channels)
+    else:
+        minn, maxx, mean, std = x_stats[0]
+        img = norm_f(img)
 
     img = swapax(img)
 
