@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
 
-import numpy as np
-import theano
+"""
+This script trains a model with architecture/data specified in configuration.
+It produces a directory with trained model and other stats.
+"""
+
 import theano.tensor as T
-import lasagne
-import random
+import theano
+import numpy as np
 import shutil
 import sys
 import os
 
-#local modules
 import trloop
 import util
 import config.train as cfg
 import config.model as model
 
 def load_dataset(filepath):
+    """
+    Loads dataset.
+    """
     return util.unpkl(filepath)
 
 def tr_cv_te_split(X, y, cv_frac=0.2, te_frac=0.1):
+    """
+    Splits X, y into train, cros-validation and test splits.
+    """
     cv = int(cv_frac*len(y))
     te = int(te_frac*len(y))
     X_tr, y_tr = X[:-(cv+te)], y[:-(cv+te)]
@@ -27,6 +35,9 @@ def tr_cv_te_split(X, y, cv_frac=0.2, te_frac=0.1):
     return X_tr, y_tr, X_cv, y_cv, X_te, y_te
 
 def load_formatted_dataset(filepath, cv_frac=0.2, te_frac=0.1):
+    """
+    Loads dataset and splits it.
+    """
     print("Loading data...")
     X, y = load_dataset(filepath)
     print("X shape: {} | y shape: {}".format(X.shape, y.shape))
@@ -48,12 +59,18 @@ def load_formatted_dataset(filepath, cv_frac=0.2, te_frac=0.1):
     return X_tr, y_tr, X_cv, y_cv, X_te, y_te
 
 def mk_output_dir(base_dir, pattern="train"):
+    """
+    Creates dir to store model.
+    """
     #creating dir
     out_dir = util.uniq_filepath(base_dir, pattern)
     os.makedirs(out_dir)
     return out_dir
 
 def populate_output_dir(out_dir):
+    """
+    Populates outout dir with info files.
+    """
     #copying model generator file to dir
     shutil.copy(model.__file__, os.path.join(out_dir, "model.py"))
     #copying this file to dir

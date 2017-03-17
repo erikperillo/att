@@ -1,7 +1,10 @@
+"""
+General-purpose utilities to be used in project.
+"""
+
 import os
 import sys
 import datetime
-import importlib.util as imputil
 import subprocess as sp
 import pickle
 
@@ -94,19 +97,6 @@ def txt_to_dict(info_file_path, sep=":"):
     pairs = (l.split(sep) for l in pairs)
     pairs = ((k.strip(), v.strip()) for k, v in pairs)
     return dict(pairs)
-
-def module_from_src_file(filepath):
-    """
-    Imports a module from an arbitrary filepath.
-    """
-    module_name = os.path.basename(filepath)
-    if not module_name.endswith(".py"):
-        raise ValueError("module file must end with .py")
-    module_name = "".join(module_name.split(".")[:-1])
-    spec = imputil.spec_from_file_location(module_name, filepath)
-    module = imputil.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 class Tee:
     """
