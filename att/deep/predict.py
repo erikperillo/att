@@ -3,41 +3,23 @@
 import sys
 import os
 import time
-
 import util
-
 import numpy as np
 import theano
 import theano.tensor as T
 from PIL import Image
 from skimage import color, transform as tf
 import lasagne
-import gzip
 import pickle
-
-#options:
-#directory where model is stored
-MODEL_DIRPATH = "./data/trained_model_11"
-#paths to model/stats
-MODEL_FILEPATH = os.path.join(MODEL_DIRPATH, "model.npz")
-DATA_STATS_FILEPATH = os.path.join(MODEL_DIRPATH, "stats.gz")
-#crops image to have target's aspect ratio before resizing
-CROP_ON_RESIZE = True
-
-#imports model from code on MODEL_DIRPATH if it's specified
-if MODEL_DIRPATH:
-    sys.path.append(MODEL_DIRPATH)
-    import genmodel as model
-    import gendatapreproc as preproc
-else:
-    import model
-    import datapreproc as preproc
-
-def swapax(img):
-    """
-    From shape (3, h, w) to (w, h, 3).
-    """
-    return np.swapaxes(np.swapaxes(img, 0, 2), 1, 2)
+import datapreproc
+import config.model as model
+import config.predict as cfg
+try:
+    import pylab
+    pylab_imported = True
+except:
+    print("WARNING: failed to import pylab, won't be able to show images")
+    pylab_imported = False
 
 def crop_to_shape(img, tgt_shp, mode="tl"):
     """
@@ -49,7 +31,7 @@ def crop_to_shape(img, tgt_shp, mode="tl"):
         x_frac, y_frac = (h1*w2)/(h2*w1), 1
     elif w1/h1 < w2/h2:
         x_frac, y_frac = 1, (h2*w1)/(h1*w2)
-    return preproc.crop(img, x_frac, y_frac, mode)
+    return datapreproc.crop(img, x_frac, y_frac, mode)
 
 def load_img(filepath):
     """
@@ -60,21 +42,21 @@ def load_img(filepath):
     return img
 
 def img_pre_proc(img):
-    norm_f = lambda x: preproc.normalize(x, method=preproc.X_NORMALIZATION)
+    norm_f = lambda x: datapreproc.normalize(x, method=cfg.norm_method)
 
     #resizing if needed
     img_shape = img.shape[1:]
     if img_shape != model.Model.INPUT_SHAPE[1:]:
         print("warning: resizing img from {} to {}".format(img_shape,
             model.Model.INPUT_SHAPE))
-        if CROP_ON_RESIZE:
+        if cfg.crop_on_resize:
             print("cropping before resizing")
             img = crop_to_shape(img, model.Model.INPUT_SHAPE[1:])
         img = tf.resize(img, model.Model.INPUT_SHAPE[1:])
 
     #normalizing image
-    x_stats, __ = util.unpkl(DATA_STATS_FILEPATH)
-    if preproc.X_NORMALIZE_PER_CHANNEL:
+    x_stats, __ = util.unpkl(cfg.dataset_stats_filepath)
+    if cfg.normalize_per_channel:
         channels = []
         for i in range(len(x_stats)):
             minn, maxx, mean, std = x_stats[i]
@@ -84,7 +66,7 @@ def img_pre_proc(img):
         minn, maxx, mean, std = x_stats[0]
         img = norm_f(img)
 
-    img = swapax(img)
+    img = datapreproc.swapax(img)
 
     return img
 
@@ -96,7 +78,7 @@ def predict(img):
 
     inp = T.tensor4("inp")
     #neural network model
-    net_model = model.Model(inp, load_net_from=MODEL_FILEPATH)
+    net_model = model.Model(inp, load_net_from=cfg.model_filepath)
     #prediction function
     pred_f = theano.function([inp], net_model.test_pred)
 
@@ -134,8 +116,7 @@ def main():
     #_img.setflags(write=1)
     #_img[::5, :, :] = 0
     #_img[:, ::5, :] = 0
-    try:
-        import pylab
+    if pylab_imported:
         print("displaying image...")
         pylab.gray()
         pylab.subplot(1, 2, 1)
@@ -145,8 +126,7 @@ def main():
         pylab.axis("off")
         pylab.imshow(pred)
         pylab.show()
-    except Exception:
-        print("WARNING: could not display image")
 
 if __name__ == '__main__':
     main()
+

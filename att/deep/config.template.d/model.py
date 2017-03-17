@@ -17,9 +17,9 @@ class Model:
             self.load_net(load_net_from)
 
         #prediction train/test symbolic functions
-        self.train_pred = lasagne.layers.get_output(self.net, 
+        self.train_pred = lasagne.layers.get_output(self.net,
             deterministic=False)
-        self.test_pred = lasagne.layers.get_output(self.net, 
+        self.test_pred = lasagne.layers.get_output(self.net,
             deterministic=True)
 
         #loss train/test symb. functionS

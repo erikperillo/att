@@ -23,74 +23,7 @@ from skimage import transform as tf, io, color, img_as_float
 import gzip
 import util
 import shutil
-
-#if dataset path isn't one in defaults (judd, cat2000, cssd, ecssd, mit_300),
-#then it must contain a dir named stimuli (with only stimuli images)
-#and a dir named ground_truth for ground-truths (with the same starting
-#names as its respectives stimuli).
-DATASET_PATH = "/home/erik/proj/ic/saliency_datasets/judd_cat2000"
-#name of dataset. it must be empty if not one in defaults.
-DATASET_NAME = os.path.basename(DATASET_PATH).lower()
-#output paths
-OUT_DATA_FILEPATH = "./data/juddtest.gz"
-OUT_DATA_STATS_FILEPATH = "./data/juddtest_stats.gz"
-#if below is set, overrides OUT_DATA_{,STATS_}FILEPATH and puts data along
-#with more info inside a directory created on dir specified by this variable.
-OUTPUT_DIR_BASEDIR = "./data"
-
-#maximum number of samples to use, if None use all
-MAX_SAMPLES = 10
-
-#show images
-SHOW_IMGS = False
-SHOW_CHANNELS = False
-
-#image shape
-X_SHAPE = (80, 120)
-Y_SHAPE = (20, 30)
-
-#crop image to have final dimension's proportions before resizing.
-CROP_ON_RESIZE = True
-
-#end datatype
-X_DTYPE = np.float64
-Y_DTYPE = np.float64
-
-#float datatype
-X_IMG_TO_FLOAT = True
-Y_IMG_TO_FLOAT = True
-
-#normalization
-X_NORMALIZATION = "std"
-X_NORMALIZE_PER_CHANNEL = True
-Y_NORMALIZATION = "std"
-
-#input colorspace
-X_IMG_COLSPACE = "lab"
-
-#swap channel axis, eg. from shape (200, 200, 3) to (3, 200, 200)
-SWAP_CHANNEL_AXIS = True
-
-#augmentation techniques
-AUGMENT = False
-#flip horizontally/vertically
-HOR_MIRROR = False
-VER_MIRROR = False
-#rotations, translations, etc
-AFFINE_TRANSFORMS = [
-    #{
-    #    "shear": 0.3,
-    #}
-]
-#gets a corner from image, eg. 0.6 tl_corner gets 60% of image from top left.
-#top left
-TL_CORNER = 0.666
-#top right
-TR_CORNER = None#0.666
-#bottom left
-BL_CORNER = None#0.666
-#bottom right
-BR_CORNER = 0.666
+import config.datapreproc as cfg
 
 #conversions from rgb to...
 col_cvt_funcs = {
@@ -105,9 +38,6 @@ col_dcvt_funcs = {
     "luv": color.luv2rgb,
     "rgb": lambda x: x
 }
-
-#seed to be used by random module
-RAND_SEED = 42
 
 def get_stimuli_paths(dataset_path, dataset_name="", shuffle=True):
     """
@@ -278,8 +208,8 @@ def files_to_mtx():
     x = []
     y = []
 
-    paths = get_stimuli_paths(DATASET_PATH, DATASET_NAME)[slice(0, MAX_SAMPLES)]
-    for k, img_fp in enumerate(paths):
+    paths = get_stimuli_paths(cfg.dataset_path, cfg.dataset_name)
+    for k, img_fp in enumerate(paths[slice(0, cfg.max_samples)]):
         print("in", img_fp, "...")
 
         #reading image
@@ -288,11 +218,11 @@ def files_to_mtx():
             print("\tconverting grayscale image to rgb")
             img = color.gray2rgb(img)
         #converting colorspace if required
-        if "rgb" != X_IMG_COLSPACE:
-            img = col_cvt_funcs[X_IMG_COLSPACE](img)
-            print("\tconverted colspace from rgb to", X_IMG_COLSPACE)
+        if "rgb" != cfg.x_img_colspace:
+            img = col_cvt_funcs[cfg.x_img_colspace](img)
+            print("\tconverted colspace from rgb to", cfg.x_img_colspace)
         #converting datatype if required
-        if img.dtype != np.float64 and X_IMG_TO_FLOAT:
+        if img.dtype != np.float64 and cfg.x_img_to_float:
             old_dtype = img.dtype
             img = img_as_float(img)
             print("\tconverted image dtype from {} to {}".format(
@@ -301,11 +231,12 @@ def files_to_mtx():
         x_imgs = [img]
 
         #reading respective ground truth
-        gt_fp = get_ground_truth_path(img_fp, DATASET_PATH, DATASET_NAME)
+        gt_fp = get_ground_truth_path(img_fp, cfg.dataset_path,
+            cfg.dataset_name)
         print("\tground-truth filepath:", gt_fp)
         gt = io.imread(gt_fp, as_grey=True)
         #converting datatype if required
-        if gt.dtype != np.float64 and Y_IMG_TO_FLOAT:
+        if gt.dtype != np.float64 and cfg.y_img_to_float:
             old_dtype = gt.dtype
             gt = img_as_float(gt)
             print("\tconverted ground truth dtype from {} to {}".format(
@@ -314,18 +245,22 @@ def files_to_mtx():
         y_imgs = [gt]
 
         #performing data augmentation
-        if AUGMENT:
-            x_imgs += augment(img, HOR_MIRROR, VER_MIRROR, AFFINE_TRANSFORMS,
-                TL_CORNER, TR_CORNER, BL_CORNER, BR_CORNER)
-            y_imgs += augment(gt, HOR_MIRROR, VER_MIRROR, AFFINE_TRANSFORMS,
-                TL_CORNER, TR_CORNER, BL_CORNER, BR_CORNER)
+        if cfg.augment:
+            x_imgs += augment(img, cfg.hor_mirror, cfg.ver_mirror,
+                cfg.affine_transforms, cfg.tl_corner, cfg.tr_corner,
+                cfg.bl_corner, cfg.br_corner)
+            y_imgs += augment(gt, cfg.hor_mirror, cfg.ver_mirror,
+                cfg.affine_transforms, cfg.tl_corner, cfg.tr_corner,
+                cfg.bl_corner, cfg.br_corner)
             print("\taugmented from 1 sample to %d" % len(x_imgs))
 
         #resizing if necessary
-        for imgs, shp, name in [[x_imgs, X_SHAPE, "x"], [y_imgs, Y_SHAPE, "y"]]:
+        for imgs, shp, name in [[x_imgs, cfg.x_shape, "x"],
+            [y_imgs, cfg.y_shape, "y"]]:
+
             if imgs[0].shape[:2] != shp:
                 old_shape = imgs[0].shape[:2]
-                if CROP_ON_RESIZE:
+                if cfg.crop_on_resize:
                     crop_mode = "tl" if k%4 == 0 else ("tr" if k%4 == 1 else\
                         ("bl" if k%4 == 2 else "br"))
                     h1, w1 = imgs[0].shape[:2]
@@ -346,18 +281,18 @@ def files_to_mtx():
                     name, old_shape, imgs[-1].shape[:2]))
 
         #displaying images and maps if required
-        if pylab_imported and SHOW_IMGS:
-            show_imgs([col_dcvt_funcs[X_IMG_COLSPACE](x) for x in x_imgs] + \
+        if pylab_imported and cfg.show_images:
+            show_imgs([col_dcvt_funcs[cfg.x_img_colspace](x) for x in x_imgs] +\
                 y_imgs)
         #displaying separate channels and maps if required
-        if pylab_imported and SHOW_CHANNELS:
+        if pylab_imported and cfg.show_channels:
             channels = [[x[:, :, i] for i in range(3)] + [y] for x, y in\
                 zip(x_imgs, y_imgs)]
             channels = [item for sublist in channels for item in sublist]
             show_imgs(channels, gray=True, grid_w=4)
 
         #swapping channel axis
-        if SWAP_CHANNEL_AXIS:
+        if cfg.swap_channel_axis:
             old_shape = x_imgs[-1].shape
             for i in range(len(x_imgs)):
                 x_imgs[i] = swapax(x_imgs[i])
@@ -377,14 +312,14 @@ def files_to_mtx():
     print("y_mtx shape: {}, dtype: {}".format(y_mtx.shape, y_mtx.dtype))
 
     #total number of pixels in each channel
-    ch_len = X_SHAPE[0]*X_SHAPE[1]
+    ch_len = cfg.x_shape[0]*cfg.x_shape[1]
     n_channels = len(x_mtx[0])//ch_len
 
     x_stats = []
     y_stats = []
     #x normalization
-    if X_NORMALIZATION is not None:
-        if X_NORMALIZE_PER_CHANNEL:
+    if cfg.x_normalization is not None:
+        if cfg.x_normalize_per_channel:
             print("normalizing x_mtx per channel")
             for i in range(n_channels):
                 rng = slice(i*ch_len, (i+1)*ch_len)
@@ -392,20 +327,20 @@ def files_to_mtx():
                 x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
                 print("x_mtx channel", i, "min, max, mean, std:",
                     ch.min(), ch.max(), ch.mean(), ch.std(), ", normalizing...")
-                x_mtx[:, rng] = normalize(x_mtx[:, rng], X_NORMALIZATION)
+                x_mtx[:, rng] = normalize(x_mtx[:, rng], cfg.x_normalization)
         else:
             x_stats.append(
                 (x_mtx.min(), x_mtx.max(), x_mtx.mean(), x_mtx.std()))
             print("x_mtx min, max, mean, std:", x_mtx.min(), x_mtx.max(),
                 x_mtx.mean(), x_mtx.std(), ", normalizing...")
-            x_mtx = normalize(x_mtx, X_NORMALIZATION)
+            x_mtx = normalize(x_mtx, cfg.x_normalization)
     #y normalization
-    if Y_NORMALIZATION is not None:
+    if cfg.y_normalization is not None:
         y_stats.append(
             (y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std()))
         print("y_mtx min, max, mean, std:", y_mtx.min(), y_mtx.max(),
             y_mtx.mean(), y_mtx.std(), ", normalizing...")
-        y_mtx = normalize(y_mtx, Y_NORMALIZATION)
+        y_mtx = normalize(y_mtx, cfg.y_normalization)
 
     #shuffling data
     print("shuffling data...")
@@ -414,12 +349,14 @@ def files_to_mtx():
     x_mtx = x_mtx[indexes]
     y_mtx = y_mtx[indexes]
 
-    if x_mtx.dtype != X_DTYPE:
-        print("setting x_mtx dtype from {} to {}".format(x_mtx.dtype, X_DTYPE))
-        x_mtx = np.array(x_mtx, dtype=X_DTYPE)
-    if y_mtx.dtype != Y_DTYPE:
-        print("setting y_mtx dtype from {} to {}".format(y_mtx.dtype, Y_DTYPE))
-        y_mtx = np.array(y_mtx, dtype=Y_DTYPE)
+    if x_mtx.dtype != cfg.x_dtype:
+        print("setting x_mtx dtype from {} to {}".format(x_mtx.dtype,
+            cfg.x_dtype))
+        x_mtx = np.array(x_mtx, dtype=cfg.x_dtype)
+    if y_mtx.dtype != cfg.y_dtype:
+        print("setting y_mtx dtype from {} to {}".format(y_mtx.dtype,
+            cfg.y_dtype))
+        y_mtx = np.array(y_mtx, dtype=cfg.y_dtype)
 
     return x_mtx, y_mtx, x_stats, y_stats
 
@@ -435,7 +372,7 @@ def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
     with open(os.path.join(out_dir, "info.txt"), "w") as f:
         print("date created (y-m-d):", util.date_str(), file=f)
         print("time created:", util.time_str(), file=f)
-        print("dataset name:", DATASET_NAME, file=f)
+        print("dataset name:", cfg.dataset_name, file=f)
         print("x shape:", x.shape, file=f)
         print("y shape:", y.shape, file=f)
         print("git commit hash:", util.git_hash(), file=f)
@@ -445,27 +382,28 @@ def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
         #    if k.isupper():
         #        print("{} : {}".format(k, v), file=f)
 
-    shutil.copy(__file__, os.path.join(out_dir, "genscript.py"))
+    shutil.copy(cfg.__file__, os.path.join(out_dir, "config.py"))
 
     return out_dir
 
 def main():
-    random.seed(RAND_SEED)
+    random.seed(cfg.rand_seed)
 
     print("reading files...")
     x, y, x_stats, y_stats = files_to_mtx()
 
-    if OUTPUT_DIR_BASEDIR is not None:
-        out_dir = save_to_output_dir(x, y, x_stats, y_stats, OUTPUT_DIR_BASEDIR,
-            DATASET_NAME + "_dataset")
+    if cfg.output_dir_basedir is not None:
+        out_dir = save_to_output_dir(x, y, x_stats, y_stats,
+            cfg.output_dir_basedir, cfg.dataset_name + "_dataset")
         print("saved dataset, info, stats to '%s'" % out_dir)
     else:
-        print("saving data to '%s'..." % OUT_DATA_FILEPATH)
-        util.pkl((x, y), OUT_DATA_FILEPATH)
-        print("saving stats to '%s'..." % OUT_DATA_STATS_FILEPATH)
-        util.pkl((x_stats, y_stats), OUT_DATA_STATS_FILEPATH)
+        print("saving data to '%s'..." % cfg.out_data_filepath)
+        util.pkl((x, y), cfg.out_data_filepath)
+        print("saving stats to '%s'..." % cfg.out_data_stats_filepath)
+        util.pkl((x_stats, y_stats), cfg.out_data_stats_filepath)
 
     print("done.")
 
 if __name__ == "__main__":
     main()
+

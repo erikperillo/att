@@ -10,18 +10,10 @@ import sys
 import os
 
 #local modules
-import model
 import trloop
 import util
-
-DATASET_FILEPATH = "./data/judd_cat2000_dataset_1/data.gz"
-OUTPUT_DIR_BASEDIR = "./data"
-N_EPOCHS = 2
-BATCH_SIZE = 1
-MAX_ITS = None
-VERBOSE = 2
-CV_FRAC = 0.1
-TE_FRAC = 0.1
+import config.train as cfg
+import config.model as model
 
 def load_dataset(filepath):
     return util.unpkl(filepath)
@@ -63,9 +55,9 @@ def mk_output_dir(base_dir, pattern="train"):
 
 def populate_output_dir(out_dir):
     #copying model generator file to dir
-    shutil.copy(model.__file__, os.path.join(out_dir, "genmodel.py"))
+    shutil.copy(model.__file__, os.path.join(out_dir, "model.py"))
     #copying this file to dir
-    shutil.copy(__file__, os.path.join(out_dir, "genscript.py"))
+    shutil.copy(cfg.__file__, os.path.join(out_dir, "config.py"))
     #info file
     with open(os.path.join(out_dir, "info.txt"), "w") as f:
         print("date created (y-m-d):", util.date_str(), file=f)
@@ -74,13 +66,13 @@ def populate_output_dir(out_dir):
 
 def main():
     X_tr, y_tr, X_cv, y_cv, X_te, y_te = load_formatted_dataset(
-        DATASET_FILEPATH, cv_frac=CV_FRAC, te_frac=TE_FRAC)
+        cfg.dataset_filepath, cv_frac=cfg.cv_frac, te_frac=cfg.te_frac)
 
     #theano variables for inputs and targets
     input_var = T.tensor4('inputs')
     target_var = T.matrix('targets')
 
-    out_dir = mk_output_dir(OUTPUT_DIR_BASEDIR)
+    out_dir = mk_output_dir(cfg.output_dir_basedir)
     print("created output dir '%s'..." % out_dir)
     populate_output_dir(out_dir)
 
@@ -103,11 +95,11 @@ def main():
     try:
         trloop.train_loop(
             X_tr, y_tr, train_fn,
-            n_epochs=N_EPOCHS, batch_size=BATCH_SIZE,
+            n_epochs=cfg.n_epochs, batch_size=cfg.batch_size,
             X_val=X_cv, y_val=y_cv, val_f=val_fn,
             val_mae_tol=None,
-            max_its=MAX_ITS,
-            verbose=VERBOSE,
+            max_its=cfg.max_its,
+            verbose=cfg.verbose,
             print_f=log.print)
     except KeyboardInterrupt:
         print("Keyboard Interrupt event.")
@@ -124,3 +116,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
