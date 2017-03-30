@@ -349,27 +349,50 @@ def files_to_mtx():
     #x normalization
     if cfg.x_normalization is not None:
         if cfg.x_normalize_per_channel:
-            print("normalizing x_mtx per channel")
-            for i in range(n_channels):
-                rng = slice(i*ch_len, (i+1)*ch_len)
-                ch = x_mtx[:, rng]
-                x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
-                print("x_mtx channel", i, "min, max, mean, std:",
-                    ch.min(), ch.max(), ch.mean(), ch.std(), ", normalizing...")
-                x_mtx[:, rng] = normalize(x_mtx[:, rng], cfg.x_normalization)
+            print("normalizing x_mtx per channel:")
+            for c in range(n_channels):
+                print("\ton channel %d" % c)
+                rng = slice(c*ch_len, (c+1)*ch_len)
+                if cfg.x_normalize_per_image:
+                    print("\tnormalizing each image...")
+                    for i in range(x_mtx.shape[0]):
+                        print("\r\t on image %d    " % i, flush=True, end="")
+                        x_mtx[i, rng] = normalize(x_mtx[i, rng],
+                            cfg.x_normalization)
+                    print("\r                              ")
+                else:
+                    print("\tnormalizing using all images...")
+                    ch = x_mtx[:, rng]
+                    x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
+                    print("\tx_mtx channel", i, "min, max, mean, std:",
+                        ch.min(), ch.max(), ch.mean(), ch.std(),
+                        ", normalizing...")
+                    x_mtx[:, rng] = normalize(x_mtx[:, rng],
+                        cfg.x_normalization)
         else:
+            print("normalizing x_mtx:")
             x_stats.append(
                 (x_mtx.min(), x_mtx.max(), x_mtx.mean(), x_mtx.std()))
-            print("x_mtx min, max, mean, std:", x_mtx.min(), x_mtx.max(),
+            print("\tx_mtx min, max, mean, std:", x_mtx.min(), x_mtx.max(),
                 x_mtx.mean(), x_mtx.std(), ", normalizing...")
             x_mtx = normalize(x_mtx, cfg.x_normalization)
     #y normalization
     if cfg.y_normalization is not None:
-        y_stats.append(
-            (y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std()))
-        print("y_mtx min, max, mean, std:", y_mtx.min(), y_mtx.max(),
-            y_mtx.mean(), y_mtx.std(), ", normalizing...")
-        y_mtx = normalize(y_mtx, cfg.y_normalization)
+        print("normalizing y_mtx:")
+        if cfg.y_normalize_per_image:
+            print("\tnormalizing per image...")
+            for i in range(y_mtx.shape[0]):
+                print("\r\t on image %d    " % i, flush=True, end="")
+                y_mtx[i, :] = normalize(y_mtx[i, :],
+                    cfg.y_normalization)
+            print("\r                                        ")
+        else:
+            print("\tnormalizing using all images...")
+            y_stats.append(
+                (y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std()))
+            print("\ty_mtx min, max, mean, std:", y_mtx.min(), y_mtx.max(),
+                y_mtx.mean(), y_mtx.std(), ", normalizing...")
+            y_mtx = normalize(y_mtx, cfg.y_normalization)
 
     #shuffling data
     print("shuffling data...")
@@ -400,7 +423,7 @@ def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
     #saving data
     util.pkl((x, y), os.path.join(out_dir, "data.gz"))
     #saving data stats
-    util.pkl((x_stats, y_stats), os.path.join(out_dir, "data_stats.gz"))
+    util.pkl((x_stats, y_stats), os.path.join(out_dir, "data_stats.pkl"))
     #info file
     with open(os.path.join(out_dir, "info.txt"), "w") as f:
         print("date created (y-m-d):", util.date_str(), file=f)

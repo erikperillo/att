@@ -27,8 +27,8 @@ show_images = False
 show_channels = False
 
 #image shape
-x_shape = (80, 120)
-y_shape = (20, 30)
+x_shape = (192, 256)
+y_shape = (12, 16)
 
 #crop image to have final dimension's proportions before resizing.
 crop_on_resize = True
@@ -44,7 +44,9 @@ y_img_to_float = True
 #normalization
 x_normalization = "std"
 x_normalize_per_channel = True
+x_normalize_per_image = True
 y_normalization = "std"
+y_normalize_per_image = False
 
 #input colorspace
 x_img_colspace = "lab"

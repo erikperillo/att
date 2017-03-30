@@ -9,6 +9,9 @@ import subprocess as sp
 import pickle
 
 def git_hash():
+    """
+    Gets git commit hash of project.
+    """
     try:
         hsh = sp.getoutput("git rev-parse HEAD").strip("\n")
     except:

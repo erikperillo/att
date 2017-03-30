@@ -10,6 +10,8 @@
 __pycache__/
 att/cvx.py
 att/deep/data/
+att/deep/config/
+att/deep/configs/
 doc/*
 !test/imgs
 !doc/Doxyfile
