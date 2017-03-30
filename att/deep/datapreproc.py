@@ -13,7 +13,6 @@ import glob
 import numpy as np
 import random
 from skimage import transform as tf, io, color, img_as_float
-import gzip
 import shutil
 try:
     import pylab
@@ -330,12 +329,14 @@ def files_to_mtx():
 
         #stacking stimuli/maps to matrices
         for xi, yi in zip(x_imgs, y_imgs):
-            x.append(xi.flatten())
-            y.append(yi.flatten())
+            x.append(xi.flatten().astype(cfg.x_dtype))
+            y.append(yi.flatten().astype(cfg.x_dtype))
 
     #creating numpy matrices
     x_mtx = np.array(x)
+    del x
     y_mtx = np.array(y)
+    del y
 
     print("x_mtx shape: {}, dtype: {}".format(x_mtx.shape, x_mtx.dtype))
     print("y_mtx shape: {}, dtype: {}".format(y_mtx.shape, y_mtx.dtype))
@@ -394,21 +395,16 @@ def files_to_mtx():
                 y_mtx.mean(), y_mtx.std(), ", normalizing...")
             y_mtx = normalize(y_mtx, cfg.y_normalization)
 
+    #TODO: remove this. filepaths are already shuffled
     #shuffling data
-    print("shuffling data...")
-    indexes = np.arange(len(x))
-    np.random.shuffle(indexes)
-    x_mtx = x_mtx[indexes]
-    y_mtx = y_mtx[indexes]
+    #print("shuffling data...")
+    #indexes = np.arange(len(x))
+    #np.random.shuffle(indexes)
+    #x_mtx = x_mtx[indexes]
+    #y_mtx = y_mtx[indexes]
 
-    if x_mtx.dtype != cfg.x_dtype:
-        print("setting x_mtx dtype from {} to {}".format(x_mtx.dtype,
-            cfg.x_dtype))
-        x_mtx = np.array(x_mtx, dtype=cfg.x_dtype)
-    if y_mtx.dtype != cfg.y_dtype:
-        print("setting y_mtx dtype from {} to {}".format(y_mtx.dtype,
-            cfg.y_dtype))
-        y_mtx = np.array(y_mtx, dtype=cfg.y_dtype)
+    assert x_mtx.dtype == cfg.x_dtype
+    assert y_mtx.dtype == cfg.y_dtype
 
     return x_mtx, y_mtx, x_stats, y_stats
 
@@ -443,15 +439,16 @@ def main():
     print("reading files...")
     x, y, x_stats, y_stats = files_to_mtx()
 
+    print("saving data...")
     if cfg.output_dir_basedir is not None:
         out_dir = save_to_output_dir(x, y, x_stats, y_stats,
             cfg.output_dir_basedir, cfg.dataset_name + "_dataset")
         print("saved dataset, info, stats to '%s'" % out_dir)
     else:
-        print("saving data to '%s'..." % cfg.out_data_filepath)
         util.pkl((x, y), cfg.out_data_filepath)
-        print("saving stats to '%s'..." % cfg.out_data_stats_filepath)
+        print("saved data to '%s'..." % cfg.out_data_filepath)
         util.pkl((x_stats, y_stats), cfg.out_data_stats_filepath)
+        print("saved stats to '%s'..." % cfg.out_data_stats_filepath)
 
     print("done.")
 

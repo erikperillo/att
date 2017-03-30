@@ -7,6 +7,8 @@ import sys
 import datetime
 import subprocess as sp
 import pickle
+import gzip
+import bz2
 
 def git_hash():
     """
@@ -67,10 +69,8 @@ def open_mp(filepath, *args, **kwargs):
     """
     ext = get_ext(filepath)
     if ext == "gz":
-        import gzip
         open_f = gzip.open
     elif ext == "bz2":
-        import bz2
         open_f = bz2.open
     else:
         open_f = open
