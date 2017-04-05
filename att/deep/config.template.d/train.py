@@ -1,18 +1,22 @@
 import os
+import glob
 
 from . import datapreproc
 
-#filepath of dataset
-dataset_filepath = os.path.join(datapreproc.output_dir_basedir,
-    datapreproc.dataset_name + "_dataset",
-    "data.gz")
 #directory where dir with train info/model will be stored
-output_dir_basedir = datapreproc.output_dir_basedir
+output_dir_basedir = os.path.join(datapreproc.output_dir_basedir,
+    datapreproc.dataset_name + "_dataset_2")
+
+_dataset_filepaths = glob.glob(os.path.join(output_dir_basedir,"data_part*.gz"))
+#filepaths of train batches
+dataset_train_filepaths = _dataset_filepaths[:-1]
+#filepaths of validation batches
+dataset_val_filepaths = _dataset_filepaths[-1:]
 
 #number of epochs to use in train
 n_epochs = 2
 #batch size
-batch_size = 1
+batch_size = 10
 #maximum number of iterations
 max_its = None
 #0 for nothing, 1 for only warnings, 2 for everything
@@ -21,3 +25,5 @@ verbose = 2
 cv_frac = 0.1
 #train fraction
 te_frac = 0.1
+#validation function value tolerance
+val_f_val_tol = None

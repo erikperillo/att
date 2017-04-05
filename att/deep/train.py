@@ -82,12 +82,9 @@ def populate_output_dir(out_dir):
         print("git commit hash:", util.git_hash(), file=f)
 
 def main():
-    X_tr, y_tr, X_cv, y_cv, X_te, y_te = load_formatted_dataset(
-        cfg.dataset_filepath, cv_frac=cfg.cv_frac, te_frac=cfg.te_frac)
-
     #theano variables for inputs and targets
-    input_var = T.tensor4('inputs')
-    target_var = T.matrix('targets')
+    input_var = T.tensor4("inputs")
+    target_var = T.tensor4("targets")
 
     out_dir = mk_output_dir(cfg.output_dir_basedir)
     print("created output dir '%s'..." % out_dir)
@@ -106,24 +103,26 @@ def main():
     val_fn = theano.function([input_var, target_var],
         [net_model.test_loss, net_model.mae])
 
+    print("getting data filepaths...", flush=True)
+    tr_set = cfg.dataset_train_filepaths
+    val_set = cfg.dataset_val_filepaths
+    print("tr_set: {}".format(", ".join(tr_set)))
+    print("val_set: {}".format(", ".join(val_set)))
+
     print("calling train loop")
     #creating logging object
     log = util.Tee([sys.stdout, open(os.path.join(out_dir, "train.log"), "w")])
     try:
         trloop.train_loop(
-            X_tr, y_tr, train_fn,
+            tr_set, tr_f=train_fn,
             n_epochs=cfg.n_epochs, batch_size=cfg.batch_size,
-            X_val=X_cv, y_val=y_cv, val_f=val_fn,
-            val_mae_tol=None,
+            val_set=val_set, val_f=val_fn, val_f_val_tol=cfg.val_f_val_tol,
             max_its=cfg.max_its,
-            verbose=cfg.verbose,
-            print_f=log.print)
+            verbose=cfg.verbose, print_f=log.print)
     except KeyboardInterrupt:
         print("Keyboard Interrupt event.")
 
     print("end.")
-    err, mae = val_fn(X_te, y_te)
-    print("test loss: %f | test mae: %f" % (err, mae))
 
     model_path = os.path.join(out_dir, "model.npz")
     print("saving model to '{}'".format(model_path))

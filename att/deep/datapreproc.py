@@ -14,6 +14,8 @@ import numpy as np
 import random
 from skimage import transform as tf, io, color, img_as_float
 import shutil
+from math import ceil
+from time import sleep
 try:
     import pylab
     pylab_imported = True
@@ -113,6 +115,12 @@ def unit_normalize(data):
     """
     return (data - data.min())/(data.max() - data.min())
 
+def max_normalize(data):
+    """
+    Max normalization.
+    """
+    return data/data.max()
+
 def normalize(data, method=None):
     """
     Wrapper for normalization methods.
@@ -121,6 +129,8 @@ def normalize(data, method=None):
         return std_normalize(data)
     elif method == "unit":
         return unit_normalize(data)
+    elif method == "max":
+        return max_normalize(data)
     elif method == "none" or method is None:
         return data
     else:
@@ -228,7 +238,7 @@ def augment(img, hor_mirr, ver_mirr, affine_tfs,
 
     return augmented
 
-def files_to_mtx():
+def files_to_mtx(stimuli_paths):
     """
     This routine assumes 3-channel stimuli loaded in RGB in shape (H, W, 3)
         and 1-channel maps loaded in grayscale in shape (H, W).
@@ -236,8 +246,7 @@ def files_to_mtx():
     x = []
     y = []
 
-    paths = get_stimuli_paths(cfg.dataset_path, cfg.dataset_name)
-    for k, img_fp in enumerate(paths[slice(0, cfg.max_samples)]):
+    for k, img_fp in enumerate(stimuli_paths):
         print("in", img_fp, "...")
 
         #reading image
@@ -272,17 +281,7 @@ def files_to_mtx():
         #list of all ground truths
         y_imgs = [gt]
 
-        #performing data augmentation
-        if cfg.augment:
-            x_imgs += augment(img, cfg.hor_mirror, cfg.ver_mirror,
-                cfg.affine_transforms, cfg.tl_corner, cfg.tr_corner,
-                cfg.bl_corner, cfg.br_corner)
-            y_imgs += augment(gt, cfg.hor_mirror, cfg.ver_mirror,
-                cfg.affine_transforms, cfg.tl_corner, cfg.tr_corner,
-                cfg.bl_corner, cfg.br_corner)
-            print("\taugmented from 1 sample to %d" % len(x_imgs))
-
-        #resizing if necessary
+        #cropping if necessary
         for imgs, shp, name in [[x_imgs, cfg.x_shape, "x"],
             [y_imgs, cfg.y_shape, "y"]]:
 
@@ -302,11 +301,32 @@ def files_to_mtx():
                     print(("\tcropped {}: x_frac: {:5f}, y_frac: {}, mode: {} "
                         "from {} to {}").format(name, x_frac, y_frac, crop_mode,
                             old_shape, imgs[-1].shape[:2]))
-                old_shape = imgs[0].shape[:2]
-                for i in range(len(imgs)):
+
+        #performing data augmentation
+        if cfg.augment:
+            x_imgs += augment(x_imgs[0], cfg.hor_mirror, cfg.ver_mirror,
+                cfg.affine_transforms, cfg.tl_corner, cfg.tr_corner,
+                cfg.bl_corner, cfg.br_corner)
+            y_imgs += augment(y_imgs[0], cfg.hor_mirror, cfg.ver_mirror,
+                cfg.affine_transforms, cfg.tl_corner, cfg.tr_corner,
+                cfg.bl_corner, cfg.br_corner)
+            print("\taugmented from 1 sample to %d" % len(x_imgs))
+
+        #resizing if necessary
+        resized = {}
+        for imgs, shp, name in [[x_imgs, cfg.x_shape, "x"],
+            [y_imgs, cfg.y_shape, "y"]]:
+            for i, __ in enumerate(imgs):
+                if imgs[i].shape[:2] != shp:
+                    old_shape = imgs[i].shape[:2]
                     imgs[i] = tf.resize(imgs[i], shp)
-                print("\tresized {} from {} to {}".format(
-                    name, old_shape, imgs[-1].shape[:2]))
+                    key = "{} -> {}".format(old_shape, imgs[i].shape[:2])
+                    val = "{}_img[{}]".format(name, i)
+                    if not key in resized:
+                        resized[key] = []
+                    resized[key].append(val)
+        for k, v in resized.items():
+            print("\t" + ", ".join(v), "resized:", k)
 
         #displaying images and maps if required
         if pylab_imported and cfg.show_images:
@@ -334,9 +354,7 @@ def files_to_mtx():
 
     #creating numpy matrices
     x_mtx = np.array(x)
-    del x
     y_mtx = np.array(y)
-    del y
 
     print("x_mtx shape: {}, dtype: {}".format(x_mtx.shape, x_mtx.dtype))
     print("y_mtx shape: {}, dtype: {}".format(y_mtx.shape, y_mtx.dtype))
@@ -349,107 +367,213 @@ def files_to_mtx():
     y_stats = []
     #x normalization
     if cfg.x_normalization is not None:
-        if cfg.x_normalize_per_channel:
-            print("normalizing x_mtx per channel:")
-            for c in range(n_channels):
-                print("\ton channel %d" % c)
-                rng = slice(c*ch_len, (c+1)*ch_len)
-                if cfg.x_normalize_per_image:
-                    print("\tnormalizing each image...")
-                    for i in range(x_mtx.shape[0]):
-                        print("\r\t on image %d    " % i, flush=True, end="")
-                        x_mtx[i, rng] = normalize(x_mtx[i, rng],
-                            cfg.x_normalization)
-                    print("\r                              ")
-                else:
-                    print("\tnormalizing using all images...")
-                    ch = x_mtx[:, rng]
-                    x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
-                    print("\tx_mtx channel", i, "min, max, mean, std:",
-                        ch.min(), ch.max(), ch.mean(), ch.std(),
-                        ", normalizing...")
-                    x_mtx[:, rng] = normalize(x_mtx[:, rng],
+        for c in range(n_channels):
+            print("\ton channel %d" % c)
+            rng = slice(c*ch_len, (c+1)*ch_len)
+            if cfg.x_normalize_per_image:
+                print("\tnormalizing each x image per channel...")
+                for i in range(x_mtx.shape[0]):
+                    print("\r\t on image %d    " % i, flush=True, end="")
+                    x_mtx[i, rng] = normalize(x_mtx[i, rng],
                         cfg.x_normalization)
-        else:
-            print("normalizing x_mtx:")
-            x_stats.append(
-                (x_mtx.min(), x_mtx.max(), x_mtx.mean(), x_mtx.std()))
-            print("\tx_mtx min, max, mean, std:", x_mtx.min(), x_mtx.max(),
-                x_mtx.mean(), x_mtx.std(), ", normalizing...")
-            x_mtx = normalize(x_mtx, cfg.x_normalization)
+                print("\r                              ")
+            else:
+                ch = x_mtx[:, rng]
+                x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
+                print("\tx_mtx channel", i, "min, max, mean, std:",
+                    ch.min(), ch.max(), ch.mean(), ch.std())
     #y normalization
     if cfg.y_normalization is not None:
-        print("normalizing y_mtx:")
         if cfg.y_normalize_per_image:
-            print("\tnormalizing per image...")
+            print("\tnormalizing y per image...")
             for i in range(y_mtx.shape[0]):
                 print("\r\t on image %d    " % i, flush=True, end="")
                 y_mtx[i, :] = normalize(y_mtx[i, :],
                     cfg.y_normalization)
             print("\r                                        ")
         else:
-            print("\tnormalizing using all images...")
             y_stats.append(
                 (y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std()))
-            print("\ty_mtx min, max, mean, std:", y_mtx.min(), y_mtx.max(),
-                y_mtx.mean(), y_mtx.std(), ", normalizing...")
-            y_mtx = normalize(y_mtx, cfg.y_normalization)
-
-    #TODO: remove this. filepaths are already shuffled
-    #shuffling data
-    #print("shuffling data...")
-    #indexes = np.arange(len(x))
-    #np.random.shuffle(indexes)
-    #x_mtx = x_mtx[indexes]
-    #y_mtx = y_mtx[indexes]
+            print("\ty_mtx min, max, mean, std:",
+                y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std())
 
     assert x_mtx.dtype == cfg.x_dtype
     assert y_mtx.dtype == cfg.y_dtype
 
     return x_mtx, y_mtx, x_stats, y_stats
 
-def save_to_output_dir(x, y, x_stats, y_stats, base_dir=".", pattern="dataset"):
+def mk_output_dir(base_dir=".", pattern="dataset"):
     """
-    Saves matrices (and stats) obtained from files_to_mtx along with other info
-    in a newly created dir created in base_dir.
+    Creates unique dir in base dir.
     """
     #creating dir
     out_dir = util.uniq_filepath(base_dir, pattern)
     os.makedirs(out_dir)
-    #saving data
-    util.pkl((x, y), os.path.join(out_dir, "data.gz"))
-    #saving data stats
-    util.pkl((x_stats, y_stats), os.path.join(out_dir, "data_stats.pkl"))
+
     #info file
     with open(os.path.join(out_dir, "info.txt"), "w") as f:
         print("date created (y-m-d):", util.date_str(), file=f)
         print("time created:", util.time_str(), file=f)
         print("dataset name:", cfg.dataset_name, file=f)
-        print("x shape:", x.shape, file=f)
-        print("y shape:", y.shape, file=f)
         print("git commit hash:", util.git_hash(), file=f)
     #copying configuration file
     shutil.copy(cfg.__file__, os.path.join(out_dir, "genconfig.py"))
 
     return out_dir
 
+def save_to_output_dir(out_dir, x, y, x_stats, y_stats, pattern="data"):
+    """
+    Saves matrices (and stats) obtained from files_to_mtx along with other info
+    in out_dir.
+    """
+    data_fp = os.path.join(out_dir, pattern + ".gz")
+    util.pkl((x, y), data_fp)
+    #saving data stats
+    data_stats_fp = os.path.join(out_dir, pattern + "_stats.pkl")
+    util.pkl((x_stats, y_stats), data_stats_fp)
+    return out_dir
+
+def batch_stats_to_global_stats(x_stats, y_stats):
+    """
+    assumes x_stats in format:
+    [(batch_weight, [(ch_1_min, ch_1_max, ch_1_mean, ch_1_std), ..., ]), ...]
+    and y_stats in format:
+    [(batch_weight, [(min, max, mean, std)]), ...]
+    """
+    #relative frequency of each batch
+    weights = [st[0] for st in x_stats]
+
+    #getting y stats
+    _y_stats = [s[1][0] for s in y_stats]
+    y_minn = min(s[0] for s in _y_stats)
+    y_maxx = max(s[1] for s in _y_stats)
+    y_mean = sum(w*s[2] for w, s in zip(weights, _y_stats))
+    y_std = np.sqrt(sum(w*s[3]**2 for w, s in zip(weights, _y_stats)))
+    y_stats = (y_minn, y_maxx, y_mean, y_std)
+
+    #getting x stats channel-wise
+    n_x_channels = len(x_stats[0][1])
+    x_ch_stats = []
+    for i in range(n_x_channels):
+        ch_stats = [s[1][i] for s in x_stats]
+        minn = min(s[0] for s in ch_stats)
+        maxx = max(s[1] for s in ch_stats)
+        mean = sum(w*s[2] for w, s in zip(weights, ch_stats))
+        std = np.sqrt(sum(w*s[3]**2 for w, s in zip(weights, ch_stats)))
+        x_ch_stats.append((minn, maxx, mean, std))
+
+    return x_ch_stats, y_stats
+
+def _normalize_after_saving(x, y, x_stats, y_stats):
+    #x_stats in format:
+    #[(ch_1_min, ch_1_max, ch_1_mean, ch_1_std), ...]
+    #y_stats in format:
+    #(min, max, mean, std)
+    if cfg.x_normalization is not None and not cfg.x_normalize_per_image:
+        print("\tnormalizing x")
+        ch_len = cfg.x_shape[0]*cfg.x_shape[1]
+        for c in range(len(x_stats)):
+            sl = slice(c*ch_len, (c+1)*ch_len)
+            if cfg.x_normalization == "std":
+                x[sl] = (x[sl]-x_stats[c][2])/x_stats[c][3]
+            elif cfg.x_normalization == "unit":
+                x[sl] = (x[sl]-x_stats[c][0])/(x_stats[c][1]-x_stats[c][0])
+            elif cfg.x_normalization == "max":
+                x[sl] = x[sl]/x_stats[c][1]
+            else:
+                raise ValueError("invalid x normalization method")
+
+    if cfg.y_normalization is not None and not cfg.y_normalize_per_image:
+        print("\tnormalizing y")
+        if cfg.y_normalization == "std":
+            y = (y - y_stats[2])/y_stats[3]
+        elif cfg.y_normalization == "unit":
+            y = (y - y_stats[0])/(y_stats[1] - y_stats[0])
+        elif cfg.y_normalization == "max":
+            y = y/y_stats[1]
+        else:
+            raise ValueError("invalid y normalization method")
+
+    return x, y
+
+def normalize_after_saving(out_dir, x_stats, y_stats, pattern="data_part_"):
+    #making global stats and saving
+    x_stats, y_stats = batch_stats_to_global_stats(x_stats, y_stats)
+    util.pkl((x_stats, y_stats), os.path.join(out_dir, "data_stats.pkl"))
+    for fn in glob.glob(os.path.join(out_dir, pattern + "*")):
+        if "stats" in fn:
+            continue
+        print("normalizing data in '%s'..." % fn)
+        x, y = util.unpkl(fn)
+        x, y = _normalize_after_saving(x, y, x_stats, y_stats)
+        util.pkl((x, y), fn)
+
 def main():
     random.seed(cfg.rand_seed)
 
-    print("reading files...")
-    x, y, x_stats, y_stats = files_to_mtx()
+    out_dir = mk_output_dir(cfg.output_dir_basedir,
+        cfg.dataset_name + "_dataset")
+    print("created output dir in '%s'" % out_dir)
 
-    print("saving data...")
-    if cfg.output_dir_basedir is not None:
-        out_dir = save_to_output_dir(x, y, x_stats, y_stats,
-            cfg.output_dir_basedir, cfg.dataset_name + "_dataset")
-        print("saved dataset, info, stats to '%s'" % out_dir)
+    #getting images to use
+    div = 1 if not cfg.augment else \
+        (1 + cfg.hor_mirror + cfg.ver_mirror)*(1 +\
+        (cfg.tl_corner is not None) + (cfg.tr_corner is not None) +\
+        (cfg.bl_corner is not None) + (cfg.br_corner is not None) +\
+        len(cfg.affine_transforms))
+    print("will augment sources by a factor of", div)
+
+    stimuli_paths = get_stimuli_paths(cfg.dataset_path, cfg.dataset_name)
+    if cfg.max_samples is not None:
+        n_samples = cfg.max_samples
     else:
-        util.pkl((x, y), cfg.out_data_filepath)
-        print("saved data to '%s'..." % cfg.out_data_filepath)
-        util.pkl((x_stats, y_stats), cfg.out_data_stats_filepath)
-        print("saved stats to '%s'..." % cfg.out_data_stats_filepath)
+        n_samples = len(stimuli_paths)*div
+    n_sources = n_samples//div
+    print("n_samples: {}, n_sources: {}".format(n_samples, n_sources))
+    stimuli_paths = stimuli_paths[:n_sources]
 
+    #calculating size of sources batches
+    if cfg.data_save_batch_size is not None:
+        batch_size = cfg.data_save_batch_size//div
+        n_batches = ceil(n_sources/batch_size)
+    else:
+        batch_size = n_samples
+        n_batches = 1
+    print("batch_size: {}, n_batches: {}".format(batch_size, n_batches))
+
+    print("starting in ", end="", flush=True)
+    for s in "...".join(map(str, range(5, 0, -1))):
+        print(s, end="", flush=True)
+        sleep(0.33)
+    print()
+
+    x_stats = []
+    y_stats = []
+    for i in range(n_batches):
+        print("in batch %d" % (i+1))
+
+        try:
+            x, y, _x_stats, _y_stats = files_to_mtx(stimuli_paths[:batch_size])
+        except Exception as e:
+            print("error in batch", i+1)
+            raise e
+        batch_w = len(stimuli_paths[:batch_size])/n_sources
+        x_stats.append((batch_w, _x_stats))
+        y_stats.append((batch_w, _y_stats))
+
+        print("saving data...")
+        save_to_output_dir(out_dir, x, y, _x_stats, _y_stats,
+            "data_part_%d" % (i+1))
+
+        stimuli_paths = stimuli_paths[batch_size:]
+
+    norm_x = cfg.x_normalization is not None and not cfg.x_normalize_per_image
+    norm_y = cfg.y_normalization is not None and not cfg.y_normalize_per_image
+    if norm_x or norm_y:
+        print("normalizing after saving...")
+        normalize_after_saving(out_dir, x_stats, y_stats)
+
+    print("saved everything to '%s'" % out_dir)
     print("done.")
 
 if __name__ == "__main__":
