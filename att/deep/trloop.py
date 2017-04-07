@@ -15,23 +15,21 @@ def _silence(*args, **kwargs):
 
 def _batches_gen(X, y, batch_size, shuffle=False):
     n_samples = len(y)
-
     indices = np.arange(n_samples)
     if shuffle:
         np.random.shuffle(indices)
-
-    for start_idx in range(0, n_samples-batch_size+1, batch_size):
+    for start_idx in range(0, max(n_samples-batch_size+1, 1), batch_size):
         excerpt = indices[start_idx:start_idx+batch_size]
         yield X[excerpt], y[excerpt]
 
 def _batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
     for fp in filepaths:
-        print_f("    [loading file '{}'...]".format(fp), end="\r")
-
+        msg = "    [loading file '{}'...]".format(fp)
+        print_f(msg, end="\r", flush=True)
         X, y = util.unpkl(fp)
         X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
         y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
-
+        print_f(len(msg)*" ", end="\r")
         for batch_X, batch_y in _batches_gen(X, y, batch_size, shuffle):
             yield batch_X, batch_y
 
@@ -104,6 +102,7 @@ def train_loop(
         val_batch_gen = lambda: _batches_gen_iter(val_set, batch_size, True,
             info)
     elif len(val_set) == 2:
+        validation = True
         val_iter = True
         X_val, y_val = val_set
         n_val_batches = max(len(y_val)//batch_size, 1)

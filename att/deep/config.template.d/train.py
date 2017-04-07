@@ -9,9 +9,13 @@ output_dir_basedir = os.path.join(datapreproc.output_dir_basedir,
 
 _dataset_filepaths = glob.glob(os.path.join(output_dir_basedir,"data_part*.gz"))
 #filepaths of train batches
-dataset_train_filepaths = _dataset_filepaths[:-1]
+dataset_train_filepaths = _dataset_filepaths[0:2]
 #filepaths of validation batches
-dataset_val_filepaths = _dataset_filepaths[-1:]
+dataset_val_filepaths = None#_dataset_filepaths[2:3]
+#if not None, ignores dataset_{train,val}_filepaths and uses this as source
+dataset_filepath = None#_dataset_filepaths[-1]
+#validation fraction. ignored if dataset_filepath is not used
+val_frac = 0.1
 
 #number of epochs to use in train
 n_epochs = 2
@@ -21,9 +25,5 @@ batch_size = 10
 max_its = None
 #0 for nothing, 1 for only warnings, 2 for everything
 verbose = 2
-#cross-validation fraction
-cv_frac = 0.1
-#train fraction
-te_frac = 0.1
 #validation function value tolerance
 val_f_val_tol = None

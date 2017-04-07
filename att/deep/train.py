@@ -23,40 +23,43 @@ def load_dataset(filepath):
     """
     return util.unpkl(filepath)
 
-def tr_cv_te_split(X, y, cv_frac=0.2, te_frac=0.1):
+def tr_val_split(X, y, val_frac):
     """
-    Splits X, y into train, cros-validation and test splits.
+    Splits X, y into train and validation sets.
     """
-    cv = int(cv_frac*len(y))
-    te = int(te_frac*len(y))
-    X_tr, y_tr = X[:-(cv+te)], y[:-(cv+te)]
-    X_cv, y_cv = X[-(cv+te):-te], y[-(cv+te):-te]
-    X_te, y_te = X[-te:], y[-te:]
-    return X_tr, y_tr, X_cv, y_cv, X_te, y_te
+    val = int(val_frac*len(y))
+    tr_slc = slice(0, -val if val > 0 else None)
+    val_slc = slice(-val, None if val > 0 else 0)
 
-def load_formatted_dataset(filepath, cv_frac=0.2, te_frac=0.1):
+    X_tr, y_tr = X[tr_slc], y[tr_slc]
+    X_val, y_val = X[val_slc], y[val_slc]
+
+    return X_tr, y_tr, X_val, y_val
+
+def load_formatted_dataset(filepath, val_frac):
     """
     Loads dataset and splits it.
     """
-    print("Loading data...")
+    print("\tloading data...")
     X, y = load_dataset(filepath)
-    print("X shape: {} | y shape: {}".format(X.shape, y.shape))
+    print("\tX shape: {} | y shape: {}".format(X.shape, y.shape))
 
-    print("Splitting...")
-    X_tr, y_tr, X_cv, y_cv, X_te, y_te = tr_cv_te_split(X, y, cv_frac, te_frac)
-    print("X_tr shape: {} | y_tr shape: {}".format(X_tr.shape, y_tr.shape))
-    print("X_cv shape: {} | y_cv shape: {}".format(X_cv.shape, y_cv.shape))
-    print("X_te shape: {} | y_te shape: {}".format(X_te.shape, y_te.shape))
+    print("\tsplitting...")
+    X_tr, y_tr, X_val, y_val = tr_val_split(X, y, val_frac)
+    print("\tX_tr shape: {} | y_tr shape: {}".format(X_tr.shape, y_tr.shape))
+    print("\tX_val shape: {} | y_val shape: {}".format(X_val.shape,
+        y_val.shape))
 
-    print("Reshaping...")
+    print("\treshaping...")
     X_tr = X_tr.reshape((X_tr.shape[0],) + model.Model.INPUT_SHAPE)
-    X_cv = X_cv.reshape((X_cv.shape[0],) + model.Model.INPUT_SHAPE)
-    X_te = X_te.reshape((X_te.shape[0],) + model.Model.INPUT_SHAPE)
-    print("X_tr shape: {} | y_tr shape: {}".format(X_tr.shape, y_tr.shape))
-    print("X_cv shape: {} | y_cv shape: {}".format(X_cv.shape, y_cv.shape))
-    print("X_te shape: {} | y_te shape: {}".format(X_te.shape, y_te.shape))
+    X_val = X_val.reshape((X_val.shape[0],) + model.Model.INPUT_SHAPE)
+    y_tr = y_tr.reshape((y_tr.shape[0],) + model.Model.OUTPUT_SHAPE)
+    y_val = y_val.reshape((y_val.shape[0],) + model.Model.OUTPUT_SHAPE)
+    print("\tX_tr shape: {} | y_tr shape: {}".format(X_tr.shape, y_tr.shape))
+    print("\tX_val shape: {} | y_val shape: {}".format(X_val.shape,
+        y_val.shape))
 
-    return X_tr, y_tr, X_cv, y_cv, X_te, y_te
+    return X_tr, y_tr, X_val, y_val
 
 def mk_output_dir(base_dir, pattern="train"):
     """
@@ -104,17 +107,28 @@ def main():
         [net_model.test_loss, net_model.mae])
 
     print("getting data filepaths...", flush=True)
-    tr_set = cfg.dataset_train_filepaths
-    val_set = cfg.dataset_val_filepaths
-    print("tr_set: {}".format(", ".join(tr_set)))
-    print("val_set: {}".format(", ".join(val_set)))
+    #iterative loading of dataset from disk
+    if cfg.dataset_filepath is None:
+        print("using iterative loading of data from disk")
+        tr_set = cfg.dataset_train_filepaths
+        val_set = cfg.dataset_val_filepaths
+    #single-time loading of dataset from disk
+    else:
+        print("using single-time loading of data from disk")
+        X_tr, y_tr, X_val, y_val = load_formatted_dataset(cfg.dataset_filepath,
+            cfg.val_frac)
+        tr_set = X_tr, y_tr
+        if X_val.shape[0] > 0 and y_val.shape[0] > 0:
+            val_set = X_val, y_val
+        else:
+            val_set = None
 
     print("calling train loop")
     #creating logging object
     log = util.Tee([sys.stdout, open(os.path.join(out_dir, "train.log"), "w")])
     try:
         trloop.train_loop(
-            tr_set, tr_f=train_fn,
+            tr_set=tr_set, tr_f=train_fn,
             n_epochs=cfg.n_epochs, batch_size=cfg.batch_size,
             val_set=val_set, val_f=val_fn, val_f_val_tol=cfg.val_f_val_tol,
             max_its=cfg.max_its,

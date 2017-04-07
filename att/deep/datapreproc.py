@@ -371,13 +371,14 @@ def files_to_mtx(stimuli_paths):
             print("\ton channel %d" % c)
             rng = slice(c*ch_len, (c+1)*ch_len)
             if cfg.x_normalize_per_image:
-                print("\tnormalizing each x image per channel...")
+                print("\tnormalizing each x imagel...")
                 for i in range(x_mtx.shape[0]):
                     print("\r\t on image %d    " % i, flush=True, end="")
                     x_mtx[i, rng] = normalize(x_mtx[i, rng],
                         cfg.x_normalization)
                 print("\r                              ")
             else:
+                print("\tnormalizing whole dataset")
                 ch = x_mtx[:, rng]
                 x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
                 print("\tx_mtx channel", i, "min, max, mean, std:",
@@ -396,9 +397,6 @@ def files_to_mtx(stimuli_paths):
                 (y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std()))
             print("\ty_mtx min, max, mean, std:",
                 y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std())
-
-    assert x_mtx.dtype == cfg.x_dtype
-    assert y_mtx.dtype == cfg.y_dtype
 
     return x_mtx, y_mtx, x_stats, y_stats
 
@@ -511,11 +509,12 @@ def normalize_after_saving(out_dir, x_stats, y_stats, pattern="data_part_"):
 def main():
     random.seed(cfg.rand_seed)
 
+    #creating output dir
     out_dir = mk_output_dir(cfg.output_dir_basedir,
         cfg.dataset_name + "_dataset")
     print("created output dir in '%s'" % out_dir)
 
-    #getting images to use
+    #div is the factor by which each image will be augmented
     div = 1 if not cfg.augment else \
         (1 + cfg.hor_mirror + cfg.ver_mirror)*(1 +\
         (cfg.tl_corner is not None) + (cfg.tr_corner is not None) +\
@@ -523,6 +522,7 @@ def main():
         len(cfg.affine_transforms))
     print("will augment sources by a factor of", div)
 
+    #paths of stimuli images
     stimuli_paths = get_stimuli_paths(cfg.dataset_path, cfg.dataset_name)
     if cfg.max_samples is not None:
         n_samples = cfg.max_samples
@@ -549,6 +549,7 @@ def main():
 
     x_stats = []
     y_stats = []
+    #main loop
     for i in range(n_batches):
         print("in batch %d" % (i+1))
 
@@ -567,6 +568,7 @@ def main():
 
         stimuli_paths = stimuli_paths[batch_size:]
 
+    #normalization after saving
     norm_x = cfg.x_normalization is not None and not cfg.x_normalize_per_image
     norm_y = cfg.y_normalization is not None and not cfg.y_normalize_per_image
     if norm_x or norm_y:
