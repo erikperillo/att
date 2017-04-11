@@ -17,25 +17,23 @@ class Model:
             self.load_net(load_net_from)
 
         #prediction train/test symbolic functions
-        self.train_pred = lasagne.layers.get_output(self.net["output"],
+        self.train_pred = lasagne.layers.get_output(self.net,
             deterministic=False)
-        self.test_pred = lasagne.layers.get_output(self.net["output"],
+        self.test_pred = lasagne.layers.get_output(self.net,
             deterministic=True)
 
         #loss train/test symb. functionS
         self.train_loss = lasagne.objectives.squared_error(self.train_pred,
             self.target_var).mean()
         #optional regularization term
-        #reg = lasagne.regularization.regularize_network_params(
-        #    self.net["output"],
+        #reg = lasagne.regularization.regularize_network_params(self.net,
         #    lasagne.regularization.l2)
         #self.train_loss += reg*0.00001
         self.test_loss = lasagne.objectives.squared_error(self.test_pred,
             self.target_var).mean()
 
         #updates symb. function for gradient descent
-        self.params = lasagne.layers.get_all_params(self.net["output"],
-            trainable=True)
+        self.params = lasagne.layers.get_all_params(self.net, trainable=True)
         self.updates = lasagne.updates.nesterov_momentum(
             self.train_loss, self.params, learning_rate=0.01, momentum=0.9)
 
@@ -49,48 +47,48 @@ class Model:
         if inp_shp is None:
             inp_shp = (None,) + Model.INPUT_SHAPE
 
-        net = {}
-
         #input
-        net["input"] = lasagne.layers.InputLayer(shape=inp_shp,
-            input_var=input_var)
+        net = lasagne.layers.InputLayer(shape=inp_shp, input_var=input_var,
+            name="a")
 
         #convpool layer
-        net["conv1"] = lasagne.layers.Conv2DLayer(net["input"],
+        net = lasagne.layers.Conv2DLayer(net,
             num_filters=32, filter_size=(3, 3),
             nonlinearity=lasagne.nonlinearities.rectify,
-            pad="same")
-        net["pool1"] = lasagne.layers.MaxPool2DLayer(net["conv1"],
-            pool_size=(2, 2))
+            pad="same", name="b")
+        net = lasagne.layers.MaxPool2DLayer(net, pool_size=(2, 2), name="c")
 
         #convpool layer
-        net["conv2"] = lasagne.layers.Conv2DLayer(net["pool1"],
+        net = lasagne.layers.Conv2DLayer(net,
             num_filters=48, filter_size=(3, 3),
             nonlinearity=lasagne.nonlinearities.rectify,
-            pad="same")
-        net["pool2"] = lasagne.layers.MaxPool2DLayer(net["conv2"],
-            pool_size=(2, 2))
+            pad="same", name="d")
+        net = lasagne.layers.MaxPool2DLayer(net, pool_size=(2, 2), name="e")
 
         #convpool layer
-        net["conv3"] = lasagne.layers.Conv2DLayer(net["pool2"],
+        net = lasagne.layers.Conv2DLayer(net,
             num_filters=64, filter_size=(3, 3),
             nonlinearity=lasagne.nonlinearities.rectify,
-            pad="same")
-        net["pool3"] = lasagne.layers.MaxPool2DLayer(net["conv3"],
-            pool_size=(2, 2))
+            pad="same", name="f")
+        net = lasagne.layers.MaxPool2DLayer(net, pool_size=(2, 2), name="g")
 
         #convpool layer
-        net["conv4"] = lasagne.layers.Conv2DLayer(net["pool3"],
-            num_filters=80, filter_size=(3, 3),
+        net = lasagne.layers.Conv2DLayer(
+            net, num_filters=80, filter_size=(3, 3),
             nonlinearity=lasagne.nonlinearities.rectify,
-            pad="same")
-        net["pool4"] = lasagne.layers.MaxPool2DLayer(net["conv4"],
-            pool_size=(2, 2))
+            pad="same", name="h")
+        net = lasagne.layers.MaxPool2DLayer(net, pool_size=(2, 2), name="i")
 
         #output
-        net["output"] = lasagne.layers.Conv2DLayer(net["pool4"],
-            num_filters=1, filter_size=(1, 1),
-            nonlinearity=lasagne.nonlinearities.identity)
+        net = lasagne.layers.Conv2DLayer(
+            net, num_filters=1, filter_size=(1, 1),
+            nonlinearity=lasagne.nonlinearities.identity, name="j")
+
+        print("oi:")
+        print(net)
+        print(type(net))
+        print(net.get_params(name="b"))
+        print(type(net.get_params(name="b")))
 
         return net
 
@@ -98,14 +96,12 @@ class Model:
         """
         Saves net weights.
         """
-        np.savez(filepath, *lasagne.layers.get_all_param_values(
-            self.net["output"]))
+        np.savez(filepath, *lasagne.layers.get_all_param_values(self.net))
 
     def load_net(self, filepath):
         """
         Loads net weights.
         """
         with np.load(filepath) as f:
-            param_values = [f["arr_%d" % i] for i in range(len(f.files))]
-            lasagne.layers.set_all_param_values(self.net["output"],
-                param_values)
+            param_values = [f['arr_%d' % i] for i in range(len(f.files))]
+            lasagne.layers.set_all_param_values(self.net, param_values)
