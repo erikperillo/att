@@ -12,10 +12,29 @@ def set_layer_as_rigid(layer):
     for k in layer.params.keys():
         layer.params[k] -= {"regularizable", "trainable"}
 
+def std_norm(x):
+    return (x - T.mean(x))/T.std(x)
+
+def corr_coef(pred, tgt):
+    return T.mean(std_norm(pred)*std_norm(tgt))
+
+def r_sqr(pred, tgt):
+    return T.square(coef_corr(pred, tgt))
+
+def sim(pred, tgt):
+    return T.sum(T.minimum(pred/pred.sum(), tgt/tgt.sum()))
+
+def norm_mse(pred, tgt, alpha):
+    return T.square((pred/pred.max() - tgt)/(alpha - tgt)).mean()
+
+def mse(pred, tgt):
+    return lasagne.objectives.squared_error(pred, tgt).mean()
+
 class Model:
     #in format depth, rows, cols
     INPUT_SHAPE = (3, 384, 512)
     OUTPUT_SHAPE = (3, 384//2, 512//2)
+    ALPHA = 1.1
 
     def __init__(self, input_var=None, target_var=None, load_net_from=None):
         self.input_var = T.tensor4('inps') if input_var is None else input_var
@@ -33,8 +52,7 @@ class Model:
             deterministic=True)
 
         #loss train/test symb. functionS
-        self.train_loss = lasagne.objectives.squared_error(self.train_pred,
-            self.target_var).mean()
+        self.train_loss = norm_mse(self.train_pred, self.target_var, ALPHA)
         #optional regularization term
         #reg = lasagne.regularization.regularize_network_params(
         #    self.net["output"],
