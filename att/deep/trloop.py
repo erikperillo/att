@@ -1,6 +1,7 @@
 import numpy as np
 import util
 from config import model
+import config.train as cfg
 import time
 
 def _str_fmt_time(seconds):
@@ -27,9 +28,17 @@ def _batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
         msg = "    [loading file '{}'...]".format(fp)
         print_f(msg, end="\r", flush=True)
         X, y = util.unpkl(fp)
+        X = X.astype(cfg.x_dtype, casting="same_kind")
+        y = y.astype(cfg.y_dtype, casting="same_kind")
         X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
         y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
         print_f(len(msg)*" ", end="\r")
+        #print("\nX: dtype={}, shape={}, isnanc={}, isinfc={}".format(
+        #    X.dtype, X.shape, np.isnan(X).sum(), np.isinf(X).sum()))
+        #print(min(x.std() for x in X))
+        #print("y: dtype={}, shape={}, isnanc={}, isinfc={}".format(
+        #    y.dtype, y.shape, np.isnan(y).sum(), np.isinf(y).sum()))
+        #print(min(x.std() for x in y))
         for batch_X, batch_y in _batches_gen(X, y, batch_size, shuffle):
             yield batch_X, batch_y
 

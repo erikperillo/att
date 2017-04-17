@@ -6,6 +6,8 @@ import os
 import sys
 import datetime
 import subprocess as sp
+import numpy as np
+from PIL import Image
 import pickle
 import gzip
 import bz2
@@ -89,6 +91,14 @@ def unpkl(filepath):
     """
     with open_mp(filepath, "rb") as f:
         return pickle.load(f)
+
+def load_image(filepath):
+    """
+    Loads image in RGB format from filepath.
+    """
+    img = Image.open(filepath).convert("RGB")
+    img = np.asarray(img)
+    return img
 
 def txt_to_dict(info_file_path, sep=":"):
     """

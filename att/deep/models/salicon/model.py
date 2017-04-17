@@ -8,27 +8,38 @@ from lasagne.layers import ConcatLayer
 import numpy as np
 from theano import tensor as T
 
-def set_layer_as_rigid(layer):
+def set_layer_as_immutable(layer):
+    """Sets layer parameters so as not to be modified in training steps."""
     for k in layer.params.keys():
         layer.params[k] -= {"regularizable", "trainable"}
 
 def std_norm(x):
+    """Mean-std normalization."""
     return (x - T.mean(x))/T.std(x)
 
 def corr_coef(pred, tgt):
+    """Correlation Coefficient."""
     return T.mean(std_norm(pred)*std_norm(tgt))
 
-def r_sqr(pred, tgt):
+def r_squared(pred, tgt):
+    """R-squared."""
     return T.square(coef_corr(pred, tgt))
 
-def sim(pred, tgt):
+def similarity(pred, tgt):
+    """Similarity."""
     return T.sum(T.minimum(pred/pred.sum(), tgt/tgt.sum()))
 
+def mse(pred, tgt):
+    """Mean-squared-error."""
+    return lasagne.objectives.squared_error(pred, tgt).mean()
+
 def norm_mse(pred, tgt, alpha):
+    """Normalized mean-squared-error."""
     return T.square((pred/pred.max() - tgt)/(alpha - tgt)).mean()
 
-def mse(pred, tgt):
-    return lasagne.objectives.squared_error(pred, tgt).mean()
+def mae(pred, tgt):
+    """Mean-absolute-error."""
+    return T.mean(abs(pred - tgt))
 
 class Model:
     #in format depth, rows, cols
@@ -52,7 +63,7 @@ class Model:
             deterministic=True)
 
         #loss train/test symb. functionS
-        self.train_loss = norm_mse(self.train_pred, self.target_var, ALPHA)
+        self.train_loss = -coef_corr(self.train_pred, self.target_var)
         #optional regularization term
         #reg = lasagne.regularization.regularize_network_params(
         #    self.net["output"],

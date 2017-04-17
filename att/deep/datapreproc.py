@@ -40,19 +40,28 @@ col_dcvt_funcs = {
     "rgb": lambda x: x
 }
 
+counter = 0
+
+def dataset_name_from_dataset_path(dataset_path):
+    return os.path.basename(dataset_path).lower()
+
 def get_stimuli_paths(dataset_path, dataset_name="", shuffle=True):
     """
     Gets list of stimuli paths given a dataset path.
     Assumes a certain directory structure given the dataset.
     """
     if not dataset_name:
-        dataset_name = os.path.basename(dataset_path).lower()
+        dataset_name = dataset_name_from_dataset_path(dataset_path)
 
     if dataset_name == "judd":
         filepaths = glob.glob(os.path.join(dataset_path, "stimuli", "*.jpeg"))
     elif dataset_name == "cat2000":
         filepaths = glob.glob(os.path.join(
             dataset_path, "trainSet", "Stimuli", "*.jpg"))
+    elif dataset_name == "salicon":
+        fps = glob.glob(os.path.join(dataset_path, "images", "*train*.jpg"))
+        fps.extend(glob.glob(os.path.join(dataset_path, "images", "*val*.jpg")))
+        filepaths = fps
     elif dataset_name == "cssd":
         filepaths = glob.glob(os.path.join(dataset_path, "images", "*.jpg"))
     elif dataset_name == "ecssd":
@@ -74,7 +83,7 @@ def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
     stimulus.
     """
     if not dataset_name:
-        dataset_name = os.path.basename(dataset_path).lower()
+        dataset_name = dataset_name_from_dataset_path(dataset_path)
 
     stimulus_filename = os.path.basename(stimulus_path)
     stimulus_name = ".".join(stimulus_filename.split(".")[:-1])
@@ -86,6 +95,9 @@ def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
         map_filename = stimulus_filename
         map_path = os.path.join(
             dataset_path, "trainSet", "FIXATIONMAPS", map_filename)
+    elif dataset_name == "salicon":
+        map_filename = stimulus_filename
+        map_path = os.path.join(dataset_path, "maps", map_filename)
     elif dataset_name == "cssd":
         print("WARNING: cssd has ground-truth masks and not maps.")
         map_filename = stimulus_name + ".png"
@@ -97,7 +109,7 @@ def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
     elif dataset_name == "mit_300":
         raise ValueError("mit_300 has no saliency maps or ground truth masks")
     else:
-        match = os.path.join(dataset_path, "ground_truth", stimulus_name + "*")
+        match = os.path.join(dataset_path, "fixmaps", stimulus_name + "*")
         map_path = glob.glob(match)[0]
         #raise ValueError("unknown dataset name '%s'" % dataset_name)
 
@@ -245,9 +257,11 @@ def files_to_mtx(stimuli_paths):
     """
     x = []
     y = []
+    global counter
 
     for k, img_fp in enumerate(stimuli_paths):
-        print("in", img_fp, "...")
+        print("[counter = {}] in {}...".format(counter, img_fp))
+        counter += 1
 
         #reading image
         img = io.imread(img_fp, as_grey=False)
@@ -296,6 +310,8 @@ def files_to_mtx(stimuli_paths):
                         x_frac, y_frac = (h1*w2)/(h2*w1), 1
                     elif w1/h1 < w2/h2:
                         x_frac, y_frac = 1, (h2*w1)/(h1*w2)
+                    else:
+                        x_frac, y_frac = 1, 1
                     for i in range(len(imgs)):
                         imgs[i] = crop(imgs[i], x_frac, y_frac, crop_mode)
                     print(("\tcropped {}: x_frac: {:5f}, y_frac: {}, mode: {} "
@@ -355,6 +371,13 @@ def files_to_mtx(stimuli_paths):
     #creating numpy matrices
     x_mtx = np.array(x)
     y_mtx = np.array(y)
+
+    #shuffling data
+    print("shuffling data...")
+    indexes = np.arange(len(x))
+    np.random.shuffle(indexes)
+    x_mtx = x_mtx[indexes]
+    y_mtx = y_mtx[indexes]
 
     print("x_mtx shape: {}, dtype: {}".format(x_mtx.shape, x_mtx.dtype))
     print("y_mtx shape: {}, dtype: {}".format(y_mtx.shape, y_mtx.dtype))
@@ -544,7 +567,7 @@ def main():
     print("starting in ", end="", flush=True)
     for s in "...".join(map(str, range(5, 0, -1))):
         print(s, end="", flush=True)
-        sleep(0.33)
+        sleep(0.2)
     print()
 
     x_stats = []

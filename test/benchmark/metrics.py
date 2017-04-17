@@ -94,11 +94,13 @@ def nss(map_filepath, pts_filepath):
 
     return score
 
-def _cc(sal_map, gt_sal_map):
-    sal_map = std_norm(sal_map)
-    gt_sal_map = std_norm(gt_sal_map)
+def cov(a, b):
+    a_mean = a.mean()
+    b_mean = b.mean()
+    return ((a - a_mean)*(b - b_mean)).mean()
 
-    return (sal_map*gt_sal_map).mean()
+def _cc(sal_map, gt_sal_map):
+    return cov(sal_map, gt_sal_map)/(gt_sal_map.std()*gt_sal_map.std())
 
 def cc(map_filepath, gt_map_filepath):
     map_img, gt_map_img = load_and_fit_dims(map_filepath, gt_map_filepath)

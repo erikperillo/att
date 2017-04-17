@@ -12,6 +12,7 @@ att/cvx.py
 att/deep/data/
 att/deep/config/
 att/deep/configs/
+att/deep/exps/
 doc/*
 !test/imgs
 !doc/Doxyfile

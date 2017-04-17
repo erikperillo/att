@@ -12,7 +12,6 @@ import numpy as np
 import glob
 import theano
 import theano.tensor as T
-from PIL import Image
 from skimage import color, transform as tf
 try:
     import pylab
@@ -36,31 +35,27 @@ def crop_to_shape(img, tgt_shp, mode="tl"):
         x_frac, y_frac = (h1*w2)/(h2*w1), 1
     elif w1/h1 < w2/h2:
         x_frac, y_frac = 1, (h2*w1)/(h1*w2)
+    else:
+        x_frac, y_frac = 1, 1
     return datapreproc.crop(img, x_frac, y_frac, mode)
-
-def _load_img(filepath):
-    """
-    Loads image in RGB format from filepath.
-    """
-    img = Image.open(filepath).convert("RGB")
-    img = np.asarray(img)
-    return img
 
 def load_img(filepath):
     """
     Loads image in RGB from filepath and resizes if needed.
     """
     #getting image
-    img = _load_img(filepath)
+    img = util.load_image(filepath)
 
     #resizing if needed
-    img_shape = img.shape[1:]
+    img_shape = img.shape[:-1] if cfg.swap_img_channel_axis else img.shape[1:]
     if img_shape != model.Model.INPUT_SHAPE[1:]:
         print("\twarning: resizing img from {} to {}".format(img_shape,
-            model.Model.INPUT_SHAPE))
+            model.Model.INPUT_SHAPE[1:]), end="")
         if cfg.crop_on_resize:
-            print("\tcropping before resizing")
+            print(" (cropping before resizing)")
             img = crop_to_shape(img, model.Model.INPUT_SHAPE[1:])
+        else:
+            print()
         img = tf.resize(img, model.Model.INPUT_SHAPE[1:])
 
     return img
@@ -78,8 +73,14 @@ def predict(img, pred_f):
 
     #reshaping
     pred = pred.reshape(model.Model.OUTPUT_SHAPE[1:])
+    print("\tprediction pre-unit norm:",
+        "min: {:5f}, max: {:5f}, mean: {:5f}, std: {:5f}".format(
+        pred.min(), pred.max(), pred.mean(), pred.std()))
     #unit normalization
     pred = (pred - pred.min())/(pred.max() - pred.min())
+    print("\tprediction pos-unit norm:",
+        "min: {:5f}, max: {:5f}, mean: {:5f}, std: {:5f}".format(
+        pred.min(), pred.max(), pred.mean(), pred.std()))
     #resizing
     pred = tf.resize(pred, model.Model.INPUT_SHAPE[1:])
 
@@ -90,25 +91,28 @@ def img_pre_proc(img):
     Takes an RGB image as input and pre-processes it so as to be a valid
     input to the model.
     """
-    norm_f = lambda x: datapreproc.normalize(x, method=cfg.norm_method)
+    norm_f = lambda x: datapreproc.normalize(x, method=cfg.img_normalization)
 
     #converting to proper colorspace
     img = datapreproc.col_cvt_funcs[cfg.img_colspace](img)
 
     #normalizing image
-    x_stats, __ = util.unpkl(cfg.dataset_stats_filepath)
-    if cfg.normalize_per_channel:
-        channels = []
-        for i in range(len(x_stats)):
-            minn, maxx, mean, std = x_stats[i]
-            channels.append(norm_f(img[:, :, i]))
-        img = np.dstack(channels)
+    channels = []
+    if not cfg.normalize_per_image:
+        raise NotImplementedError("normalization per dataset not implemented")
     else:
-        minn, maxx, mean, std = x_stats[0]
-        img = norm_f(img)
+        print("\tnormalizing input image per channel with method '{}'".format(
+            cfg.img_normalization))
+        for i in range(3):
+            channels.append(norm_f(img[:, :, i]))
+    img = np.dstack(channels)
 
+    #swapping axis if necessary
     if cfg.swap_img_channel_axis:
         img = datapreproc.swapax(img)
+
+    #converting to proper data type
+    img = np.array(img, dtype=cfg.img_dtype)
 
     return img
 
@@ -146,13 +150,14 @@ def main():
             print("\tloading image...")
             img = load_img(fp)
             pre_proc_img = img_pre_proc(img)
-
-            print("\tpredicting...", end=" ")
+            print("\tpredicting...")
             pred, pred_time = predict(pre_proc_img, pred_f)
-            print("done. took %f seconds" % pred_time)
-        except:
+            print("\tdone predicting. took %f seconds" % pred_time)
+        except FileNotFoundError:
             print("\tWARNING: could not load file")
             continue
+        except:
+            raise
 
         #displaying results if required
         if pylab_imported and cfg.show_images:

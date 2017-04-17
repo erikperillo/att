@@ -86,8 +86,8 @@ def populate_output_dir(out_dir):
 
 def main():
     #theano variables for inputs and targets
-    input_var = T.tensor4("inputs")
-    target_var = T.tensor4("targets")
+    input_var = T.tensor4("inputs", dtype="floatX")
+    target_var = T.tensor4("targets", dtype="floatX")
 
     out_dir = mk_output_dir(cfg.output_dir_basedir)
     print("created output dir '%s'..." % out_dir)
@@ -112,6 +112,8 @@ def main():
         print("using iterative loading of data from disk")
         tr_set = cfg.dataset_train_filepaths
         val_set = cfg.dataset_val_filepaths
+        print("train set:", tr_set)
+        print("validation set:", val_set)
     #single-time loading of dataset from disk
     else:
         print("using single-time loading of data from disk")
