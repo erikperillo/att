@@ -40,7 +40,9 @@ col_dcvt_funcs = {
     "rgb": lambda x: x
 }
 
+#counter for images processed
 counter = 0
+id_counter = 0
 
 def dataset_name_from_dataset_path(dataset_path):
     return os.path.basename(dataset_path).lower()
@@ -75,6 +77,7 @@ def get_stimuli_paths(dataset_path, dataset_name="", shuffle=True):
 
     if shuffle:
         random.shuffle(filepaths)
+
     return filepaths
 
 def get_ground_truth_path(stimulus_path, dataset_path, dataset_name=""):
@@ -119,6 +122,9 @@ def std_normalize(data):
     """
     Mean-std normalization.
     """
+    if data.std() == 0:
+        raise Exception("ZERO STD")
+
     return (data - data.mean())/data.std()
 
 def unit_normalize(data):
@@ -212,6 +218,7 @@ def show_imgs(imgs, gray=False, grid_w=None):
         pylab.subplot(grid_h, grid_w, i+1)
         pylab.axis("off")
         pylab.imshow(img)
+
     pylab.show()
 
 def augment(img, hor_mirr, ver_mirr, affine_tfs,
@@ -257,41 +264,47 @@ def files_to_mtx(stimuli_paths):
     """
     x = []
     y = []
+    fps = []
     global counter
 
     for k, img_fp in enumerate(stimuli_paths):
         print("[counter = {}] in {}...".format(counter, img_fp))
         counter += 1
 
-        #reading image
+        #reading image (x)
         img = io.imread(img_fp, as_grey=False)
         if len(img.shape) != 3:
             print("\tconverting grayscale image to rgb")
             img = color.gray2rgb(img)
-        #converting colorspace if required
+
+        #converting x colorspace if required
         if "rgb" != cfg.x_img_colspace:
             img = col_cvt_funcs[cfg.x_img_colspace](img)
             print("\tconverted colspace from rgb to", cfg.x_img_colspace)
-        #converting datatype if required
+
+        #converting x datatype if required
         if img.dtype != np.float64 and cfg.x_img_to_float:
             old_dtype = img.dtype
             img = img_as_float(img)
             print("\tconverted image dtype from {} to {}".format(
                 old_dtype, img.dtype))
+
         #list of all x images
         x_imgs = [img]
 
-        #reading respective ground truth
+        #reading respective ground truth (y)
         gt_fp = get_ground_truth_path(img_fp, cfg.dataset_path,
             cfg.dataset_name)
         print("\tground-truth filepath:", gt_fp)
         gt = io.imread(gt_fp, as_grey=True)
-        #converting datatype if required
+
+        #converting y datatype if required
         if gt.dtype != np.float64 and cfg.y_img_to_float:
             old_dtype = gt.dtype
             gt = img_as_float(gt)
             print("\tconverted ground truth dtype from {} to {}".format(
                 old_dtype, gt.dtype))
+
         #list of all ground truths
         y_imgs = [gt]
 
@@ -335,7 +348,7 @@ def files_to_mtx(stimuli_paths):
             for i, __ in enumerate(imgs):
                 if imgs[i].shape[:2] != shp:
                     old_shape = imgs[i].shape[:2]
-                    imgs[i] = tf.resize(imgs[i], shp)
+                    imgs[i] = tf.resize(imgs[i], shp, mode="constant")
                     key = "{} -> {}".format(old_shape, imgs[i].shape[:2])
                     val = "{}_img[{}]".format(name, i)
                     if not key in resized:
@@ -348,6 +361,7 @@ def files_to_mtx(stimuli_paths):
         if pylab_imported and cfg.show_images:
             show_imgs([col_dcvt_funcs[cfg.x_img_colspace](x) for x in x_imgs] +\
                 y_imgs)
+
         #displaying separate channels and maps if required
         if pylab_imported and cfg.show_channels:
             channels = [[x[:, :, i] for i in range(3)] + [y] for x, y in\
@@ -367,10 +381,12 @@ def files_to_mtx(stimuli_paths):
         for xi, yi in zip(x_imgs, y_imgs):
             x.append(xi.flatten().astype(cfg.x_dtype))
             y.append(yi.flatten().astype(cfg.x_dtype))
+            #appending image/ground truth path to list
+            fps.append((img_fp, gt_fp))
 
     #creating numpy matrices
-    x_mtx = np.array(x)
-    y_mtx = np.array(y)
+    x_mtx = np.array(x, dtype=cfg.x_dtype)
+    y_mtx = np.array(y, dtype=cfg.y_dtype)
 
     #shuffling data
     print("shuffling data...")
@@ -378,6 +394,7 @@ def files_to_mtx(stimuli_paths):
     np.random.shuffle(indexes)
     x_mtx = x_mtx[indexes]
     y_mtx = y_mtx[indexes]
+    fps = [fps[i] for i in indexes]
 
     print("x_mtx shape: {}, dtype: {}".format(x_mtx.shape, x_mtx.dtype))
     print("y_mtx shape: {}, dtype: {}".format(y_mtx.shape, y_mtx.dtype))
@@ -388,6 +405,7 @@ def files_to_mtx(stimuli_paths):
 
     x_stats = []
     y_stats = []
+
     #x normalization
     if cfg.x_normalization is not None:
         for c in range(n_channels):
@@ -406,6 +424,7 @@ def files_to_mtx(stimuli_paths):
                 x_stats.append((ch.min(), ch.max(), ch.mean(), ch.std()))
                 print("\tx_mtx channel", i, "min, max, mean, std:",
                     ch.min(), ch.max(), ch.mean(), ch.std())
+
     #y normalization
     if cfg.y_normalization is not None:
         if cfg.y_normalize_per_image:
@@ -421,7 +440,7 @@ def files_to_mtx(stimuli_paths):
             print("\ty_mtx min, max, mean, std:",
                 y_mtx.min(), y_mtx.max(), y_mtx.mean(), y_mtx.std())
 
-    return x_mtx, y_mtx, x_stats, y_stats
+    return x_mtx, y_mtx, x_stats, y_stats, fps
 
 def mk_output_dir(base_dir=".", pattern="dataset"):
     """
@@ -437,51 +456,68 @@ def mk_output_dir(base_dir=".", pattern="dataset"):
         print("time created:", util.time_str(), file=f)
         print("dataset name:", cfg.dataset_name, file=f)
         print("git commit hash:", util.git_hash(), file=f)
+
     #copying configuration file
     shutil.copy(cfg.__file__, os.path.join(out_dir, "genconfig.py"))
 
     return out_dir
 
-def save_to_output_dir(out_dir, x, y, x_stats, y_stats, pattern="data"):
+def save_to_output_dir(out_dir, x, y, x_stats, y_stats, fps, pattern="data"):
     """
     Saves matrices (and stats) obtained from files_to_mtx along with other info
     in out_dir.
     """
+    global id_counter
+
+    #saving data
     data_fp = os.path.join(out_dir, pattern + ".gz")
     util.pkl((x, y), data_fp)
+
     #saving data stats
     data_stats_fp = os.path.join(out_dir, pattern + "_stats.pkl")
     util.pkl((x_stats, y_stats), data_stats_fp)
+
+    #saving filepaths
+    filepaths_fp = os.path.join(out_dir, pattern + "_filepaths.csv")
+    with open(filepaths_fp, "w") as f:
+        print("id,stimulus,ground_truth", file=f)
+        for xfp, yfp in fps:
+            print("{},{},{}".format(id_counter, xfp, yfp), file=f)
+            id_counter += 1
+
     return out_dir
 
 def batch_stats_to_global_stats(x_stats, y_stats):
     """
     assumes x_stats in format:
-    [(batch_weight, [(ch_1_min, ch_1_max, ch_1_mean, ch_1_std), ..., ]), ...]
+    [(batch_1_weight, [(ch_1_min, ch_1_max, ch_1_mean, ch_1_std), ..., ]), ...]
     and y_stats in format:
-    [(batch_weight, [(min, max, mean, std)]), ...]
+    [(batch_1_weight, [(min, max, mean, std)]), ...]
     """
     #relative frequency of each batch
     weights = [st[0] for st in x_stats]
+    #print("begin:", "X:", x_stats, "\nY:", y_stats)
 
     #getting y stats
-    _y_stats = [s[1][0] for s in y_stats]
-    y_minn = min(s[0] for s in _y_stats)
-    y_maxx = max(s[1] for s in _y_stats)
-    y_mean = sum(w*s[2] for w, s in zip(weights, _y_stats))
-    y_std = np.sqrt(sum(w*s[3]**2 for w, s in zip(weights, _y_stats)))
-    y_stats = (y_minn, y_maxx, y_mean, y_std)
+    if cfg.y_normalization is not None and not cfg.y_normalize_per_image:
+        _y_stats = [s[1][0] for s in y_stats]
+        y_minn = min(s[0] for s in _y_stats)
+        y_maxx = max(s[1] for s in _y_stats)
+        y_mean = sum(w*s[2] for w, s in zip(weights, _y_stats))
+        y_std = np.sqrt(sum(w*s[3]**2 for w, s in zip(weights, _y_stats)))
+        y_stats = (y_minn, y_maxx, y_mean, y_std)
 
     #getting x stats channel-wise
-    n_x_channels = len(x_stats[0][1])
-    x_ch_stats = []
-    for i in range(n_x_channels):
-        ch_stats = [s[1][i] for s in x_stats]
-        minn = min(s[0] for s in ch_stats)
-        maxx = max(s[1] for s in ch_stats)
-        mean = sum(w*s[2] for w, s in zip(weights, ch_stats))
-        std = np.sqrt(sum(w*s[3]**2 for w, s in zip(weights, ch_stats)))
-        x_ch_stats.append((minn, maxx, mean, std))
+    if cfg.x_normalization is not None and not cfg.x_normalize_per_image:
+        n_x_channels = len(x_stats[0][1])
+        x_ch_stats = []
+        for i in range(n_x_channels):
+            ch_stats = [s[1][i] for s in x_stats]
+            minn = min(s[0] for s in ch_stats)
+            maxx = max(s[1] for s in ch_stats)
+            mean = sum(w*s[2] for w, s in zip(weights, ch_stats))
+            std = np.sqrt(sum(w*s[3]**2 for w, s in zip(weights, ch_stats)))
+            x_ch_stats.append((minn, maxx, mean, std))
 
     return x_ch_stats, y_stats
 
@@ -521,8 +557,9 @@ def normalize_after_saving(out_dir, x_stats, y_stats, pattern="data_part_"):
     #making global stats and saving
     x_stats, y_stats = batch_stats_to_global_stats(x_stats, y_stats)
     util.pkl((x_stats, y_stats), os.path.join(out_dir, "data_stats.pkl"))
+
     for fn in glob.glob(os.path.join(out_dir, pattern + "*")):
-        if "stats" in fn:
+        if "stats" in fn or "filepaths" in fn:
             continue
         print("normalizing data in '%s'..." % fn)
         x, y = util.unpkl(fn)
@@ -577,7 +614,8 @@ def main():
         print("in batch %d" % (i+1))
 
         try:
-            x, y, _x_stats, _y_stats = files_to_mtx(stimuli_paths[:batch_size])
+            x, y, _x_stats, _y_stats, fps = files_to_mtx(
+                stimuli_paths[:batch_size])
         except Exception as e:
             print("error in batch", i+1)
             raise e
@@ -585,8 +623,8 @@ def main():
         x_stats.append((batch_w, _x_stats))
         y_stats.append((batch_w, _y_stats))
 
-        print("saving data...")
-        save_to_output_dir(out_dir, x, y, _x_stats, _y_stats,
+        print("saving data part %d..." % (i+1))
+        save_to_output_dir(out_dir, x, y, _x_stats, _y_stats, fps,
             "data_part_%d" % (i+1))
 
         stimuli_paths = stimuli_paths[batch_size:]

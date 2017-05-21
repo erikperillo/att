@@ -1,86 +1,91 @@
 #!/usr/bin/env python3
 
-import oarg
+"""
+Evaluation script.
+"""
+
 import os
 import sys
-import numpy as np
-import theano.tensor as T
-from skimage import color, transform
 import theano
-import pylab
+import theano.tensor as T
+import lasagne
+
+import trloop
 
 import config.model as model
-import predict
-import datapreproc
-import util
-sys.path.append(os.path.join("..", "..", "test", "benchmark"))
-import metrics
+import config.eval as cfg
+
+def std_norm(x):
+    """Mean-std normalization."""
+    return (x - T.mean(x))/T.std(x)
+
+def unit_norm(x):
+    """Unit normalization."""
+    return (x - T.min(x))/(T.max(x) - T.min(x))
+
+def cov(a, b):
+    """Covariance."""
+    return T.mean((a - T.mean(a))*(b - T.mean(b)))
+
+def cc(pred, tgt):
+    """Correlation Coefficient."""
+    return cov(pred, tgt)/(T.std(pred)*T.std(tgt))
+
+def r_squared(pred, tgt):
+    """R-squared."""
+    return T.square(coef_corr(pred, tgt))
+
+def sim(pred, tgt):
+    """Similarity."""
+    return T.sum(T.minimum(pred/pred.sum(), tgt/tgt.sum()))
+
+def mse(pred, tgt):
+    """Mean-squared-error."""
+    return lasagne.objectives.squared_error(pred, tgt).mean()
+
+def norm_mse(pred, tgt, alpha):
+    """Normalized mean-squared-error."""
+    return T.square((pred/pred.max() - tgt)/(alpha - tgt)).mean()
+
+def mae(pred, tgt):
+    """Mean-absolute-error."""
+    return T.mean(abs(pred - tgt))
+
+EVAL_FUNCS = {
+    "cc": cc,
+    "sim": sim,
+    "mse": mse,
+    "mae": mae,
+}
 
 def main():
-    dataset_dir = oarg.Oarg("-s --dataset-dir", "", "path to dataset dir", 0)
-    dataset_name = oarg.Oarg("-d --dataset-name", "", "dataset name")
-    hlp = oarg.Oarg("-h --help", False, "this help message")
-
-    oarg.parse()
-
-    if hlp.val:
-        oarg.describe_args("options:", True)
-        exit()
-
-    if not dataset_dir.val:
-        print("error: must specify dataset dir (use -h for info)")
-        eixt()
-
-    if not os.path.isdir(dataset_dir.val):
-        print("error: '{}' is not a dir".format(dataset_dir.val))
-        exit()
-
     #input
     inp = T.tensor4("inp")
+    target = T.tensor4("target")
+
     #neural network model
-    net_model = model.Model(inp, load_net_from=predict.cfg.model_filepath)
+    net_model = model.Model(inp, load_net_from=cfg.model_filepath)
     #making prediction function
     #prediction function
-    pred_f = theano.function([inp], net_model.test_pred)
+    x = unit_norm(net_model.test_pred)
+    y = unit_norm(target)
 
-    for fp in datapreproc.get_stimuli_paths(dataset_dir.val, dataset_name.val):
-        print("in '{}'...".format(fp))
+    eval_f = theano.function([inp, target], 
+        [EVAL_FUNCS[m](x, y) for m in cfg.metrics])
 
-        print("\tloading stimulus...")
-        stimulus = predict.load_img(fp)
-        print("\tpreprocessing stimulus...")
-        pre_proc_stimulus = predict.img_pre_proc(stimulus)
-        print("\tpredicting...")
-        pred, pred_time = predict.predict(pre_proc_stimulus, pred_f)
-        print("\tdone predicting. took %f seconds" % pred_time)
+    values = {m: 0.0 for m in cfg.metrics}
+    counter = 0
 
-        fixmap_fp = datapreproc.get_ground_truth_path(fp,
-            dataset_dir.val, dataset_name.val)
-        print("\tloading fixmap from {}...".format(fixmap_fp))
-        fixmap = util.load_image(fixmap_fp)
-        fixmap = transform.resize(fixmap, model.Model.INPUT_SHAPE[1:])
-        fixmap = color.rgb2gray(fixmap)
-        fixmap = datapreproc.unit_normalize(fixmap)
+    print("evaluating...")
+    for x, y in trloop.batches_gen_iter(cfg.filepaths, 1):
+        vals = eval_f(x, y)
+        for i, m in enumerate(cfg.metrics):
+            values[m] += vals[i]
+        counter += 1
+        print("counter = %d      " % counter, end="\r", flush=True)
 
-        #if pylab_imported and cfg.show_images:
-        if True:
-            print("\tdisplaying image...")
-            pylab.subplot(1, 3, 1)
-            pylab.axis("off")
-            pylab.imshow(stimulus)
-            pylab.subplot(1, 3, 2)
-            pylab.gray()
-            pylab.axis("off")
-            pylab.imshow(color.gray2rgb(pred))
-            pylab.subplot(1, 3, 3)
-            pylab.gray()
-            pylab.axis("off")
-            pylab.imshow(color.gray2rgb(fixmap))
-            pylab.show()
-
-        print("cc:", metrics._cc(pred, fixmap))
-        print("sim:", metrics._sim(pred, fixmap))
-        print("mae:", metrics._mae(pred, fixmap))
+    for m in cfg.metrics:
+        print("{}: {}".format(m, values[m]/max(counter, 1)))
 
 if __name__ == "__main__":
     main()

@@ -116,12 +116,12 @@ def img_pre_proc(img):
 
     return img
 
-def img_filepath_to_fixmap_filepath(filepath):
+def img_filepath_to_fixmap_filepath(filepath, ext="png"):
     if "." in filepath:
         path = ".".join(filepath.split(".")[:-1])
     else:
         path = filepath
-    path = os.path.basename(path + "_orig_and_fixmap.png")
+    path = os.path.basename(path + "_orig_and_fixmap." + ext)
     return os.path.join(os.getcwd(), path)
 
 def main():
@@ -161,7 +161,6 @@ def main():
 
         #displaying results if required
         if pylab_imported and cfg.show_images:
-            print("\tdisplaying image...")
             pylab.subplot(1, 2, 1)
             pylab.axis("off")
             pylab.imshow(img)
@@ -169,13 +168,17 @@ def main():
             pylab.gray()
             pylab.axis("off")
             pylab.imshow(color.gray2rgb(pred))
-            #saving if required
-            if cfg.save_preds:
-                fig = pylab.gcf()
-                to_save = img_filepath_to_fixmap_filepath(fp)
-                pylab.savefig(to_save)
-                print("\tsaved to '%s'" % to_save)
+            print("\tdisplaying image...")
             pylab.show()
+
+        #saving if required
+        if cfg.save_preds:
+            #fig = pylab.gcf()
+            to_save = img_filepath_to_fixmap_filepath(fp, ext="jpeg")
+            print("\tsaving to '%s'" % to_save)
+            #pylab.savefig(to_save)
+            #print(pred.min(), pred.max(), pred.mean(), pred.std(), pred.shape)
+            util.save_image(pred, to_save)
 
 if __name__ == '__main__':
     main()

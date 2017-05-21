@@ -100,6 +100,15 @@ def load_image(filepath):
     img = np.asarray(img)
     return img
 
+def save_image(img, filepath):
+    """
+    Saves image to filepath.
+    """
+    grayscale = len(img.shape) < 3 or img.shape[2] == 1
+    img = Image.fromarray(img, mode="L" if grayscale else "RGB")
+    ext = filepath.split(".")[-1]
+    img.save(filepath, ext.upper())
+
 def txt_to_dict(info_file_path, sep=":"):
     """
     Gets a path to a text file with lines in format key: value and returns dict.

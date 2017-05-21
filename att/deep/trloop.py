@@ -3,6 +3,7 @@ import util
 from config import model
 import config.train as cfg
 import time
+import theano
 
 def _str_fmt_time(seconds):
     int_seconds = int(seconds)
@@ -14,7 +15,7 @@ def _str_fmt_time(seconds):
 def _silence(*args, **kwargs):
     pass
 
-def _batches_gen(X, y, batch_size, shuffle=False):
+def batches_gen(X, y, batch_size, shuffle=False):
     n_samples = len(y)
     indices = np.arange(n_samples)
     if shuffle:
@@ -23,14 +24,14 @@ def _batches_gen(X, y, batch_size, shuffle=False):
         excerpt = indices[start_idx:start_idx+batch_size]
         yield X[excerpt], y[excerpt]
 
-def _batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
+def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
     for fp in filepaths:
         msg = "    [loading file '{}'...]".format(fp)
         print_f(msg, end="\r", flush=True)
         X, y = util.unpkl(fp)
         X = X.astype(cfg.x_dtype, casting="same_kind")
-        y = y.astype(cfg.y_dtype, casting="same_kind")
         X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
+        y = y.astype(cfg.y_dtype, casting="same_kind")
         y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
         print_f(len(msg)*" ", end="\r")
         #print("\nX: dtype={}, shape={}, isnanc={}, isinfc={}".format(
@@ -39,7 +40,7 @@ def _batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
         #print("y: dtype={}, shape={}, isnanc={}, isinfc={}".format(
         #    y.dtype, y.shape, np.isnan(y).sum(), np.isinf(y).sum()))
         #print(min(x.std() for x in y))
-        for batch_X, batch_y in _batches_gen(X, y, batch_size, shuffle):
+        for batch_X, batch_y in batches_gen(X, y, batch_size, shuffle):
             yield batch_X, batch_y
 
 def _inf_gen():
@@ -89,12 +90,12 @@ def train_loop(
         tr_iter = False
         X_tr, y_tr = None, None
         n_tr_batches = None
-        tr_batch_gen = lambda: _batches_gen_iter(tr_set, batch_size, True, info)
+        tr_batch_gen = lambda: batches_gen_iter(tr_set, batch_size, True, info)
     elif len(tr_set) == 2:
         tr_iter = True
         X_tr, y_tr = tr_set
         n_tr_batches = len(y_tr)//batch_size
-        tr_batch_gen = lambda: _batches_gen(X_tr, y_tr, batch_size, True)
+        tr_batch_gen = lambda: batches_gen(X_tr, y_tr, batch_size, True)
     else:
         raise ValueError("tr_set must be either list of str or size-2-tuple") 
 
@@ -108,14 +109,14 @@ def train_loop(
         validation = True
         X_val, y_val = None, None
         n_val_batches = None
-        val_batch_gen = lambda: _batches_gen_iter(val_set, batch_size, True,
+        val_batch_gen = lambda: batches_gen_iter(val_set, batch_size, True,
             info)
     elif len(val_set) == 2:
         validation = True
         val_iter = True
         X_val, y_val = val_set
         n_val_batches = max(len(y_val)//batch_size, 1)
-        val_batch_gen = lambda: _batches_gen(X_val, y_val, batch_size, True)
+        val_batch_gen = lambda: batches_gen(X_val, y_val, batch_size, True)
     else:
         raise ValueError("val_set must be either None, list of str or "
             "size-2-tuple") 

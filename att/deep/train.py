@@ -95,7 +95,10 @@ def main():
 
     #neural network model
     print("building network...", flush=True)
-    net_model = model.Model(input_var, target_var)
+    if cfg.pre_trained_model_fp is not None:
+        print("loading pre-trained model from '%s'" % cfg.pre_trained_model_fp,
+            flush=True)
+    net_model = model.Model(input_var, target_var, cfg.pre_trained_model_fp)
 
     print("compiling functions...", flush=True)
     #compiling function performing a training step on a mini-batch (by giving
