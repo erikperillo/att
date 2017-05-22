@@ -311,25 +311,24 @@ def files_to_mtx(stimuli_paths):
         #cropping if necessary
         for imgs, shp, name in [[x_imgs, cfg.x_shape, "x"],
             [y_imgs, cfg.y_shape, "y"]]:
-
-            if imgs[0].shape[:2] != shp:
+            pyr = cfg.x_pyramid if name == "x" else cfg.y_pyramid
+            if pyr is None and imgs[0].shape[:2] != shp and cfg.crop_on_resize:
                 old_shape = imgs[0].shape[:2]
-                if cfg.crop_on_resize:
-                    crop_mode = "tl" if k%4 == 0 else ("tr" if k%4 == 1 else\
-                        ("bl" if k%4 == 2 else "br"))
-                    h1, w1 = imgs[0].shape[:2]
-                    h2, w2 = shp
-                    if w1/h1 > w2/h2:
-                        x_frac, y_frac = (h1*w2)/(h2*w1), 1
-                    elif w1/h1 < w2/h2:
-                        x_frac, y_frac = 1, (h2*w1)/(h1*w2)
-                    else:
-                        x_frac, y_frac = 1, 1
-                    for i in range(len(imgs)):
-                        imgs[i] = crop(imgs[i], x_frac, y_frac, crop_mode)
-                    print(("\tcropped {}: x_frac: {:5f}, y_frac: {}, mode: {} "
-                        "from {} to {}").format(name, x_frac, y_frac, crop_mode,
-                            old_shape, imgs[-1].shape[:2]))
+                crop_mode = "tl" if k%4 == 0 else ("tr" if k%4 == 1 else\
+                    ("bl" if k%4 == 2 else "br"))
+                h1, w1 = imgs[0].shape[:2]
+                h2, w2 = shp
+                if w1/h1 > w2/h2:
+                    x_frac, y_frac = (h1*w2)/(h2*w1), 1
+                elif w1/h1 < w2/h2:
+                    x_frac, y_frac = 1, (h2*w1)/(h1*w2)
+                else:
+                    x_frac, y_frac = 1, 1
+                for i in range(len(imgs)):
+                    imgs[i] = crop(imgs[i], x_frac, y_frac, crop_mode)
+                print(("\tcropped {}: x_frac: {:5f}, y_frac: {}, mode: {} "
+                    "from {} to {}").format(name, x_frac, y_frac, crop_mode,
+                        old_shape, imgs[-1].shape[:2]))
 
         #performing data augmentation
         if cfg.augment:
@@ -346,9 +345,19 @@ def files_to_mtx(stimuli_paths):
         for imgs, shp, name in [[x_imgs, cfg.x_shape, "x"],
             [y_imgs, cfg.y_shape, "y"]]:
             for i, __ in enumerate(imgs):
-                if imgs[i].shape[:2] != shp:
-                    old_shape = imgs[i].shape[:2]
+                old_shape = imgs[i].shape[:2]
+                pyr = cfg.x_pyramid if name == "x" else cfg.y_pyramid
+                if pyr is not None:
+                    print("applying pyr downscale factor of {} to {}".format(
+                        pyr, name))
+                    for i in range(len(imgs)):
+                        gen = tf.pyramid_gaussian(imgs[i], downscale=2)
+                        for __ in range(pyr):
+                            __ = next(gen)
+                        imgs[i] = next(gen)
+                elif old_shape != shp:
                     imgs[i] = tf.resize(imgs[i], shp, mode="constant")
+                if pyr is not None or shp != old_shape:
                     key = "{} -> {}".format(old_shape, imgs[i].shape[:2])
                     val = "{}_img[{}]".format(name, i)
                     if not key in resized:

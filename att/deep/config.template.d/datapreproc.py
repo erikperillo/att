@@ -9,16 +9,16 @@ import os
 #then it must contain a dir named stimuli (with only stimuli images)
 #and a dir named ground_truth for ground-truths (with the same starting
 #names as its respectives stimuli).
-dataset_path = "/home/erik/proj/ic/saliency_datasets/judd_cat2000"
+dataset_path = "/home/erik/data/saliency_datasets/salicon"
 #name of dataset. it must be empty if not one in defaults.
 dataset_name = os.path.basename(dataset_path).lower()
 #save data, info, etc in dir created inside dir specified by this var
 output_dir_basedir = "/home/erik/proj/att/att/deep/data"
 
 #maximum number of samples to use, if None use all
-max_samples = 128
+max_samples = None
 #save data in parts. if None, save everything in only one file.
-data_save_batch_size = 32
+data_save_batch_size = 3000
 
 #show images
 show_images = False
@@ -26,7 +26,10 @@ show_channels = False
 
 #image shape
 x_shape = (192, 256)
-y_shape = (12, 16)
+y_shape = (48, 64)
+#downscale sampling factor of pyramid. if not None, ignores x_shape and y_shape.
+x_pyramid = 1
+y_pyramid = 1
 
 #crop image to have final dimension's proportions before resizing.
 crop_on_resize = True
@@ -43,8 +46,8 @@ y_img_to_float = True
 x_normalization = "std"
 x_normalize_per_image = True
 #y normalization
-y_normalization = "std"
-y_normalize_per_image = False
+y_normalization = "unit"
+y_normalize_per_image = True
 
 #input colorspace
 x_img_colspace = "lab"
@@ -71,7 +74,7 @@ tr_corner = None#0.666
 #bottom left
 bl_corner = None#0.666
 #bottom right
-br_corner = 0.8
+br_corner = None#0.8
 
 #seed to be used by random module
 rand_seed = 9

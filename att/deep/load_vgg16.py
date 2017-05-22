@@ -64,7 +64,7 @@ def main():
     for l in layers:
         if not "Conv2DLayer" in str(type(l)):
             continue
-        print("in layer {}".format(type(l)))    
+        print("in layer {}".format(type(l)))
         plot_conv_weights(l)
 
 if __name__ == "__main__":
