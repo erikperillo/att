@@ -25,7 +25,7 @@ dataset_filepath = None#_dataset_filepaths[-1]
 val_frac = None#0.1
 
 #number of epochs to use in train
-n_epochs = 10
+n_epochs = 12
 #batch size
 batch_size = 10
 #maximum number of iterations

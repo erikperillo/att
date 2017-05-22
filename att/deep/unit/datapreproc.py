@@ -27,9 +27,6 @@ show_channels = False
 #image shape
 x_shape = (192, 256)
 y_shape = (48, 64)
-#downscale sampling factor of pyramid. if not None, ignores x_shape and y_shape.
-x_pyramid = 1
-y_pyramid = 1
 
 #crop image to have final dimension's proportions before resizing.
 crop_on_resize = True

@@ -314,7 +314,16 @@ def files_to_mtx(stimuli_paths):
 
             if imgs[0].shape[:2] != shp:
                 old_shape = imgs[0].shape[:2]
-                if cfg.crop_on_resize:
+                pyr = cfg.x_pyramid if name == "x" else cfg.y_pyramid
+                if pyr is not None:
+                    print("applying pyr downscale factor of {} to {}".format(
+                        pyr, name))
+                    for i in range(len(imgs)):
+                        gen = tf.pyramid_gaussian(img[i], downscale=2)
+                        for __ in range(pyr):
+                            __ = next(gen)
+                        imgs[i] = next(gen)
+                elif cfg.crop_on_resize:
                     crop_mode = "tl" if k%4 == 0 else ("tr" if k%4 == 1 else\
                         ("bl" if k%4 == 2 else "br"))
                     h1, w1 = imgs[0].shape[:2]

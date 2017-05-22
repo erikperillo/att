@@ -138,13 +138,9 @@ class Model:
             num_filters=96, filter_size=(3, 3),
             nonlinearity=lasagne.nonlinearities.rectify,
             pad="same")
-        net["conv10"] = lasagne.layers.Conv2DLayer(net["conv9"],
-            num_filters=104, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify,
-            pad="same")
 
         #output
-        net["output"] = lasagne.layers.Conv2DLayer(net["conv10"],
+        net["output"] = lasagne.layers.Conv2DLayer(net["conv9"],
             num_filters=1, filter_size=(1, 1),
             nonlinearity=lasagne.nonlinearities.identity)
 
