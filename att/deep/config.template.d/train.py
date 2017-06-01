@@ -13,7 +13,7 @@ pre_trained_model_fp = None
 output_dir_basedir = _data_dir_path
 
 _dataset_filepaths = glob.glob(os.path.join(_data_dir_path,
-    "salicon_dataset_unit", "data_part*.gz"))
+    "salicon_dataset_lab", "data_part*.gz"))
 
 #filepaths of train batches
 dataset_train_filepaths = _dataset_filepaths[:-1]

@@ -64,5 +64,7 @@ def build_model():
     net['fc8'] = DenseLayer(
         net['fc7_dropout'], num_units=1000, nonlinearity=None)
     net['prob'] = NonlinearityLayer(net['fc8'], softmax)
+    import lasagne
+    print("PRAMS:", lasagne.layers.count_params(net["pool5"]))
 
     return net

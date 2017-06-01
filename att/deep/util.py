@@ -96,18 +96,23 @@ def load_image(filepath):
     """
     Loads image in RGB format from filepath.
     """
-    img = Image.open(filepath).convert("RGB")
-    img = np.asarray(img)
+    img = np.asarray(Image.open(filepath).convert("RGB"))
     return img
 
 def save_image(img, filepath):
     """
     Saves image to filepath.
+    Assumes image shape in format (h, w[, c]).
     """
-    grayscale = len(img.shape) < 3 or img.shape[2] == 1
+    #adjusting shape
+    if len(img.shape) > 2 and img.shape[2] == 1:
+        img = img.reshape(img.shape[:2])
+    grayscale = len(img.shape) < 3
+    #converting to adequate format
+    img = np.clip(img, 0, 255).astype("uint8")
     img = Image.fromarray(img, mode="L" if grayscale else "RGB")
-    ext = filepath.split(".")[-1]
-    img.save(filepath, ext.upper())
+    #saving
+    img.save(filepath)
 
 def txt_to_dict(info_file_path, sep=":"):
     """

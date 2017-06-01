@@ -33,7 +33,7 @@ def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
         X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
         y = y.astype(cfg.y_dtype, casting="same_kind")
         y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
-        print_f(len(msg)*" ", end="\r")
+        #print_f(len(msg)*" ", end="\r")
         #print("\nX: dtype={}, shape={}, isnanc={}, isinfc={}".format(
         #    X.dtype, X.shape, np.isnan(X).sum(), np.isinf(X).sum()))
         #print(min(x.std() for x in X))

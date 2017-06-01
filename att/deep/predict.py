@@ -25,6 +25,8 @@ import datapreproc
 import config.model as model
 import config.predict as cfg
 
+import scipy.ndimage as nd
+
 def crop_to_shape(img, tgt_shp, mode="tl"):
     """
     Crops img so as to have the same aspect ratio as tgt_shp.
@@ -39,27 +41,6 @@ def crop_to_shape(img, tgt_shp, mode="tl"):
         x_frac, y_frac = 1, 1
     return datapreproc.crop(img, x_frac, y_frac, mode)
 
-def load_img(filepath):
-    """
-    Loads image in RGB from filepath and resizes if needed.
-    """
-    #getting image
-    img = util.load_image(filepath)
-
-    #resizing if needed
-    img_shape = img.shape[:-1] if cfg.swap_img_channel_axis else img.shape[1:]
-    if img_shape != model.Model.INPUT_SHAPE[1:]:
-        print("\twarning: resizing img from {} to {}".format(img_shape,
-            model.Model.INPUT_SHAPE[1:]), end="")
-        if cfg.crop_on_resize:
-            print(" (cropping before resizing)")
-            img = crop_to_shape(img, model.Model.INPUT_SHAPE[1:])
-        else:
-            print()
-        img = tf.resize(img, model.Model.INPUT_SHAPE[1:])
-
-    return img
-
 def predict(img, pred_f):
     """
     Takes pre-processed image as input and returns prediction.
@@ -72,7 +53,9 @@ def predict(img, pred_f):
     pred_time = time.time() - start_time
 
     #reshaping
-    pred = pred.reshape(model.Model.OUTPUT_SHAPE[1:])
+    #pred = pred.reshape(model.Model.OUTPUT_SHAPE[1:])
+    pred = pred.reshape(pred.shape[2:])
+    pred = nd.zoom(pred, (4, 4), order=1)
     print("\tprediction pre-unit norm:",
         "min: {:5f}, max: {:5f}, mean: {:5f}, std: {:5f}".format(
         pred.min(), pred.max(), pred.mean(), pred.std()))
@@ -82,7 +65,9 @@ def predict(img, pred_f):
         "min: {:5f}, max: {:5f}, mean: {:5f}, std: {:5f}".format(
         pred.min(), pred.max(), pred.mean(), pred.std()))
     #resizing
-    pred = tf.resize(pred, model.Model.INPUT_SHAPE[1:])
+    if cfg.resize:
+        print("resizing")
+        pred = tf.resize(pred, model.Model.INPUT_SHAPE[1:], mode="constant")
 
     return pred, pred_time
 
@@ -91,6 +76,17 @@ def img_pre_proc(img):
     Takes an RGB image as input and pre-processes it so as to be a valid
     input to the model.
     """
+    #resizing if needed
+    img_shape = img.shape[:-1] if cfg.swap_img_channel_axis else img.shape[1:]
+    if img_shape != model.Model.INPUT_SHAPE[1:] and cfg.resize:
+        print("\twarning: resizing img from {} to {}".format(img_shape,
+            model.Model.INPUT_SHAPE[1:]), end="")
+        if cfg.crop_on_resize:
+            print(" (cropping before resizing)", end=" ")
+            img = crop_to_shape(img, model.Model.INPUT_SHAPE[1:])
+        print("resizing")
+        img = tf.resize(img, model.Model.INPUT_SHAPE[1:], mode="constant")
+
     norm_f = lambda x: datapreproc.normalize(x, method=cfg.img_normalization)
 
     #converting to proper colorspace
@@ -121,7 +117,7 @@ def img_filepath_to_fixmap_filepath(filepath, ext="png"):
         path = ".".join(filepath.split(".")[:-1])
     else:
         path = filepath
-    path = os.path.basename(path + "_orig_and_fixmap." + ext)
+    path = os.path.basename(path + "_fixmap." + ext)
     return os.path.join(os.getcwd(), path)
 
 def main():
@@ -147,8 +143,14 @@ def main():
         print("in image {}".format(fp))
 
         try:
-            print("\tloading image...")
-            img = load_img(fp)
+            img = util.load_image(fp)
+            if cfg.max_img_shape is not None and\
+                not (img.shape[:2] <= cfg.max_img_shape):
+                print("warning: resizing img to {}".format(cfg.max_img_shape))
+                h, w = cfg.max_img_shape
+                scale = min(h/img.shape[0], w/img.shape[1])
+                img = nd.zoom(img, (scale, scale, 1), order=1)
+            print("OI2:", img.shape)
             pre_proc_img = img_pre_proc(img)
             print("\tpredicting...")
             pred, pred_time = predict(pre_proc_img, pred_f)
@@ -178,7 +180,8 @@ def main():
             print("\tsaving to '%s'" % to_save)
             #pylab.savefig(to_save)
             #print(pred.min(), pred.max(), pred.mean(), pred.std(), pred.shape)
-            util.save_image(pred, to_save)
+            util.save_image(255*pred, to_save)
+            util.save_image(img, os.path.basename(fp).split(".")[0]+"_g.jpg")
 
 if __name__ == '__main__':
     main()
