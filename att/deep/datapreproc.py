@@ -348,13 +348,12 @@ def files_to_mtx(stimuli_paths):
                 old_shape = imgs[i].shape[:2]
                 pyr = cfg.x_pyramid if name == "x" else cfg.y_pyramid
                 if pyr is not None:
-                    print("applying pyr downscale factor of {} to {}".format(
+                    print("\tapplying pyr downscale factor of {} to {}".format(
                         pyr, name))
-                    for i in range(len(imgs)):
-                        gen = tf.pyramid_gaussian(imgs[i], downscale=2)
-                        for __ in range(pyr):
-                            __ = next(gen)
-                        imgs[i] = next(gen)
+                    gen = tf.pyramid_gaussian(imgs[i], downscale=2)
+                    for __ in range(pyr):
+                        __ = next(gen)
+                    imgs[i] = next(gen)
                 elif old_shape != shp:
                     imgs[i] = tf.resize(imgs[i], shp, mode="constant")
                 if pyr is not None or shp != old_shape:
