@@ -5,6 +5,9 @@ import config.train as cfg
 import time
 import theano
 
+import threading
+import queue
+
 def _str_fmt_time(seconds):
     int_seconds = int(seconds)
     hours = int_seconds//3600
@@ -25,6 +28,9 @@ def batches_gen(X, y, batch_size, shuffle=False):
         yield X[excerpt], y[excerpt]
 
 def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
+    if shuffle:
+        np.random.shuffle(filepaths)
+
     for fp in filepaths:
         msg = "    [loading file '{}'...]".format(fp)
         print_f(msg, end="\r", flush=True)
@@ -42,6 +48,39 @@ def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
         #print(min(x.std() for x in y))
         for batch_X, batch_y in batches_gen(X, y, batch_size, shuffle):
             yield batch_X, batch_y
+
+def batches_gen_iter_async(q, stop, filepaths, batch_size, shuffle=False,
+        print_f=_silence):
+
+    if shuffle:
+        np.random.shuffle(filepaths)
+
+    index = 0
+
+    while True:
+        fp = filepaths[index]
+
+        if stop.is_set():
+            break
+
+        if q.empty():
+            msg = "    [loading file '{}'...]".format(fp)
+            print_f(msg, end="\r", flush=True)
+            X, y = util.unpkl(fp)
+
+            X = X.astype(cfg.x_dtype, casting="same_kind")
+            X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
+            y = y.astype(cfg.y_dtype, casting="same_kind")
+            y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
+
+            q.put(batches_gen(X, y, batch_size, shuffle))
+
+            index = index + 1
+            if(index >= len(filepaths)):
+                stop.set()
+                break
+
+        time.sleep(0.1)
 
 def _inf_gen():
     n = 0
@@ -97,7 +136,7 @@ def train_loop(
         n_tr_batches = len(y_tr)//batch_size
         tr_batch_gen = lambda: batches_gen(X_tr, y_tr, batch_size, True)
     else:
-        raise ValueError("tr_set must be either list of str or size-2-tuple") 
+        raise ValueError("tr_set must be either list of str or size-2-tuple")
 
     #checking whether validation set is iterative or not
     if val_set is None:
@@ -119,7 +158,7 @@ def train_loop(
         val_batch_gen = lambda: batches_gen(X_val, y_val, batch_size, True)
     else:
         raise ValueError("val_set must be either None, list of str or "
-            "size-2-tuple") 
+            "size-2-tuple")
 
     #maybe it'll run forever...
     if not val_f_val_tol and n_epochs is None and max_its is None:
@@ -137,34 +176,64 @@ def train_loop(
         if n_epochs is not None and epoch >= n_epochs:
             warn("\nWARNING: maximum number of epochs reached")
             end_reason = "n_epochs"
+            with lock:
+                work_done = True
             return end_reason
 
         info("epoch %d/%s:" % (epoch+1, _str(n_epochs)))
 
+        tr_q = queue.Queue()
+        tr_stop = threading.Event()
+        tr_data_thr = threading.Thread(target=batches_gen_iter_async,
+            args=(tr_q, tr_stop, tr_set, batch_size, True, info))
+
+        tr_data_thr.start()
+
         tr_err = 0
         tr_batch_n = 0
-        for batch in tr_batch_gen():
-            inputs, targets = batch
-            err = tr_f(inputs, targets)
-            tr_err += err
-            tr_batch_n += 1
-            info("    [train batch %d/%s] err: %.4g    %s" %\
-                (tr_batch_n, _str(n_tr_batches), err, 32*" "), end="\r")
+        while True:
+            batches_gen = tr_q.get()
+            for batch in batches_gen:
+                inputs, targets = batch
+                err = tr_f(inputs, targets)
+                tr_err += err
+                tr_batch_n += 1
+                info("    [train batch %d/%s] err: %.4g    %s" %\
+                    (tr_batch_n, _str(n_tr_batches), err, 32*" "), end="\r")
 
-            its += 1
-            if max_its is not None and its > max_its:
-                warn("\nWARNING: maximum number of iterations reached")
-                done_looping = True
-                end_reason = "max_its"
-                return end_reason
-        n_tr_batches = tr_batch_n
-        tr_err /= n_tr_batches
+                its += 1
+                if max_its is not None and its > max_its:
+                    warn("\nWARNING: maximum number of iterations reached")
+                    done_looping = True
+                    end_reason = "max_its"
+                    return end_reason
+            n_tr_batches = tr_batch_n
+            tr_err /= n_tr_batches
+
+            if tr_stop.is_set():
+                del tr_q
+                del tr_stop
+                print("breaking tr...")
+                break
+
+        tr_data_thr.join()
+
+        if validation:
+            val_q = queue.Queue()
+            val_stop = threading.Event()
+            val_data_thr = threading.Thread(target=batches_gen_iter_async,
+                args=(val_q, val_stop, val_set, batch_size, True, info))
+            val_data_thr.start()
 
         val_err = 0
         val_mae = 0
         val_batch_n = 0
-        if validation:
-            for batch in val_batch_gen():
+        while True:
+            if not validation:
+                break
+
+            batches_gen = val_q.get()
+            for batch in batches_gen:
                 inputs, targets = batch
                 err, val_f_val = val_f(inputs, targets)
                 val_err += err
@@ -187,6 +256,15 @@ def train_loop(
                     return end_reason
 
             last_val_mae = val_mae
+
+            if val_stop.is_set():
+                del val_q
+                del val_stop
+                print("breaking val...")
+                break
+
+        if validation:
+            val_data_thr.join()
 
         info("    elapsed time so far: %s" %\
             _str_fmt_time(time.time() - start_time), end=32*" " + "\r")
