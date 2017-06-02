@@ -39,7 +39,7 @@ def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
     if shuffle:
         np.random.shuffle(filepaths)
 
-    for fp in filepaths:
+    for i, fp in enumerate(filepaths):
         msg = "    [loading file '{}'...]".format(fp)
         print_f(msg, end="\r", flush=True)
         X, y = util.unpkl(fp)
@@ -51,7 +51,7 @@ def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
         y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
 
         for batch_X, batch_y in batches_gen(X, y, batch_size, shuffle):
-            yield batch_X, batch_y
+            yield i, (batch_X, batch_y)
 
 def load_data(filepaths, q, stop, print_f=print):
     i = 0
@@ -106,7 +106,6 @@ def _str_fmt_dct(dct):
 def run_epoch(
     data, func,
     batch_size=1,
-    tols={},
     info=_silence, warn=_silence,
     shuf_data=True, async_data_load=True):
 

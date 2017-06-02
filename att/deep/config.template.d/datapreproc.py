@@ -18,18 +18,18 @@ output_dir_basedir = "/home/erik/proj/att/att/deep/data"
 #maximum number of samples to use, if None use all
 max_samples = None
 #save data in parts. if None, save everything in only one file.
-data_save_batch_size = 3000
+data_save_batch_size = 500
 
 #show images
 show_images = False
 show_channels = False
 
-#image shape
-x_shape = (192, 256)
-y_shape = (48, 64)
 #downscale sampling factor of pyramid. if not None, ignores x_shape and y_shape.
-x_pyramid = 1
-y_pyramid = 1
+x_pyramid = 0
+y_pyramid = 3
+#image shape
+x_shape = (480, 640)
+y_shape = (120, 160)
 
 #crop image to have final dimension's proportions before resizing.
 crop_on_resize = True
@@ -46,7 +46,7 @@ y_img_to_float = True
 x_normalization = "std"
 x_normalize_per_image = True
 #y normalization
-y_normalization = "unit"
+y_normalization = "std"
 y_normalize_per_image = True
 
 #input colorspace

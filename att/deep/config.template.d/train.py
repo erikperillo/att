@@ -16,20 +16,20 @@ _dataset_filepaths = glob.glob(os.path.join(_data_dir_path,
     "salicon_dataset_lab", "data_part*.gz"))
 
 #filepaths of train batches
-dataset_train_filepaths = _dataset_filepaths[:-1]
+dataset_train_filepaths = _dataset_filepaths[:-2][:2]
 #filepaths of validation batches, can be None
-dataset_val_filepaths = _dataset_filepaths[-1:]
+dataset_val_filepaths = _dataset_filepaths[-2:]
 #if not None, ignores dataset_{train,val}_filepaths and uses this as source
 dataset_filepath = None#_dataset_filepaths[-1]
 #validation fraction. ignored if dataset_filepath is not used
 val_frac = None#0.1
 
 #number of epochs to use in train
-n_epochs = 10
+n_epochs = 2
 #batch size
 batch_size = 10
-#maximum number of iterations
-max_its = None
+#if True, uses separate thread to load data batches
+async_data_load = False
 #0 for nothing, 1 for only warnings, 2 for everything
 verbose = 2
 #validation function value tolerance
