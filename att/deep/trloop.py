@@ -5,6 +5,8 @@ import config.train as cfg
 import time
 import theano
 
+from collections import defaultdict
+
 import threading
 import queue
 
@@ -27,6 +29,12 @@ def batches_gen(X, y, batch_size, shuffle=False):
         excerpt = indices[start_idx:start_idx+batch_size]
         yield X[excerpt], y[excerpt]
 
+def _inf_gen():
+    n = 0
+    while True:
+        yield n
+        n += 1
+
 def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
     if shuffle:
         np.random.shuffle(filepaths)
@@ -35,59 +43,90 @@ def batches_gen_iter(filepaths, batch_size, shuffle=False, print_f=_silence):
         msg = "    [loading file '{}'...]".format(fp)
         print_f(msg, end="\r", flush=True)
         X, y = util.unpkl(fp)
+        print_f(len(msg)*" ", end="\r")
+
         X = X.astype(cfg.x_dtype, casting="same_kind")
         X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
         y = y.astype(cfg.y_dtype, casting="same_kind")
         y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
-        #print_f(len(msg)*" ", end="\r")
-        #print("\nX: dtype={}, shape={}, isnanc={}, isinfc={}".format(
-        #    X.dtype, X.shape, np.isnan(X).sum(), np.isinf(X).sum()))
-        #print(min(x.std() for x in X))
-        #print("y: dtype={}, shape={}, isnanc={}, isinfc={}".format(
-        #    y.dtype, y.shape, np.isnan(y).sum(), np.isinf(y).sum()))
-        #print(min(x.std() for x in y))
+
         for batch_X, batch_y in batches_gen(X, y, batch_size, shuffle):
             yield batch_X, batch_y
 
-def batches_gen_iter_async(q, stop, filepaths, batch_size, shuffle=False,
-        print_f=_silence):
+def load_data(filepaths, q, stop, print_f=print):
+    i = 0
+    while i < len(filepaths):
+        if stop.is_set():
+            break
+        
+        if q.empty():
+            msg = "    [loading file '{}'...]".format(filepaths[i])
+            print_f(msg, end="\r", flush=True)
+            data = util.unpkl(filepaths[i])
+            q.put(data)
+            print_f(len(msg)*" ", end="\r")
+            i += 1
 
+        time.sleep(0.1)
+
+    stop.set()
+
+def batches_gen_async(filepaths, batch_size, shuffle=False, print_f=_silence):
     if shuffle:
         np.random.shuffle(filepaths)
 
-    index = 0
+    q = queue.Queue(maxsize=1)
+    stop = threading.Event()
+    data_loader = threading.Thread(target=load_data, args=(filepaths, q, stop))
+    data_loader.start()
 
-    while True:
-        fp = filepaths[index]
-
-        if stop.is_set():
-            break
-
-        if q.empty():
-            msg = "    [loading file '{}'...]".format(fp)
-            print_f(msg, end="\r", flush=True)
-            X, y = util.unpkl(fp)
-
+    try:
+        for i in _inf_gen():
+            X, y = q.get()
             X = X.astype(cfg.x_dtype, casting="same_kind")
             X = X.reshape((X.shape[0],) + model.Model.INPUT_SHAPE)
             y = y.astype(cfg.y_dtype, casting="same_kind")
             y = y.reshape((y.shape[0],) + model.Model.OUTPUT_SHAPE)
 
-            q.put(batches_gen(X, y, batch_size, shuffle))
+            for batch_X, batch_y in batches_gen(X, y, batch_size, shuffle):
+                yield i, (batch_X, batch_y)
 
-            index = index + 1
-            if(index >= len(filepaths)):
-                stop.set()
+            if q.empty() and stop.is_set():
                 break
+    except:
+        raise
+    finally:
+        stop.set()
+        data_loader.join()
 
-        time.sleep(0.1)
+def _str_fmt_dct(dct):
+    """Assumes dict mapping str to float."""
+    return " | ".join("%s: %.4g" % (k, v) for k, v in dct.items())
 
-def _inf_gen():
-    n = 0
-    while True:
-        yield n
-        n += 1
+def run_epoch(
+    data, func,
+    batch_size=1,
+    tols={},
+    info=_silence, warn=_silence,
+    shuf_data=True, async_data_load=True):
 
+    vals_sum = defaultdict(float)
+    n_its = 0
+    batch_gen = batches_gen_async if async_data_load else batches_gen_iter
+
+    for i, (bi, xy) in enumerate(batch_gen(data, batch_size, shuf_data, info)):
+        vals = func(*xy)
+
+        for k, v in vals.items():
+            vals_sum[k] += v
+
+        n_its += 1
+        info("    [batch %d, data part %d/%d]" % (i, bi+1, len(data)),
+            _str_fmt_dct(vals), 32*" ", end="\r")
+
+    vals_mean = {k: v/n_its for k, v in vals_sum.items()}
+    return vals_mean
+ 
 def _str(obj):
     return str(obj) if obj is not None else "?"
 
@@ -95,27 +134,23 @@ def train_loop(
     tr_set, tr_f,
     n_epochs=10, batch_size=1,
     val_set=None, val_f=None, val_f_val_tol=None,
-    max_its=None,
+    async_data_load=True,
     verbose=2, print_f=print):
     """
     General Training loop.
     Parameters:
-    tr_set: 2-tuple of type numpy ndarray or list of str
-        Training set containing X and y.
+    tr_set: [str]
+        list of str Training set containing X and y.
     tr_f : callable
-        Training function giving loss.
+        Training function giving a dict in format {"name": val, ...}
     n_epochs : int or None
         Number of epochs. If None, is infinite.
     batch_size : int
         Batch size.
-    tr_set: None or 2-tuple of type numpy ndarray or list of str
+    val_set: None or [str]
         Validation set containing X and y.
     val_f : callable or None
-        Validation function giving a tuple of (loss, mae).
-    val_f_val_tol : float or None
-        If difference of curr/last validations < val_f_val_tol, stop.
-    max_its : int or None
-        Maximum number of iterations.
+        Validation function giving a dict in format {"name": val, ...}
     verbose : int
         Prints nothing if 0, only warnings if 1 and everything if >= 2.
     """
@@ -123,153 +158,34 @@ def train_loop(
     #info/warning functions
     info = print_f if verbose >= 2 else _silence
     warn = print_f if verbose >= 1 else _silence
+    epoch_info = print if verbose >= 2 else _silence
 
-    #checking whether train set is iterative or not
-    if isinstance(tr_set[0], str):
-        tr_iter = False
-        X_tr, y_tr = None, None
-        n_tr_batches = None
-        tr_batch_gen = lambda: batches_gen_iter(tr_set, batch_size, True, info)
-    elif len(tr_set) == 2:
-        tr_iter = True
-        X_tr, y_tr = tr_set
-        n_tr_batches = len(y_tr)//batch_size
-        tr_batch_gen = lambda: batches_gen(X_tr, y_tr, batch_size, True)
-    else:
-        raise ValueError("tr_set must be either list of str or size-2-tuple")
+    #checking if use validation
+    validation = val_set is not None and val_f is not None
 
-    #checking whether validation set is iterative or not
-    if val_set is None:
-        validation = False
-        val_iter = False
-        n_val_batches = None
-    elif isinstance(val_set[0], str):
-        val_iter = False
-        validation = True
-        X_val, y_val = None, None
-        n_val_batches = None
-        val_batch_gen = lambda: batches_gen_iter(val_set, batch_size, True,
-            info)
-    elif len(val_set) == 2:
-        validation = True
-        val_iter = True
-        X_val, y_val = val_set
-        n_val_batches = max(len(y_val)//batch_size, 1)
-        val_batch_gen = lambda: batches_gen(X_val, y_val, batch_size, True)
-    else:
-        raise ValueError("val_set must be either None, list of str or "
-            "size-2-tuple")
-
-    #maybe it'll run forever...
-    if not val_f_val_tol and n_epochs is None and max_its is None:
-        warn("WARNING: training_loop will never stop since"
-            " val_f_val_tol, n_epochs and max_its are all None")
+    if async_data_load:
+        info("[info] using async loading of data")
 
     #initial values for some variables
-    last_val_mae = None
-    its = 0
     start_time = time.time()
 
     #main loop
-    info("starting training loop...")
+    info("[info] starting training loop...")
     for epoch in _inf_gen():
         if n_epochs is not None and epoch >= n_epochs:
             warn("\nWARNING: maximum number of epochs reached")
             end_reason = "n_epochs"
-            with lock:
-                work_done = True
             return end_reason
 
         info("epoch %d/%s:" % (epoch+1, _str(n_epochs)))
 
-        tr_q = queue.Queue()
-        tr_stop = threading.Event()
-        tr_data_thr = threading.Thread(target=batches_gen_iter_async,
-            args=(tr_q, tr_stop, tr_set, batch_size, True, info))
-
-        tr_data_thr.start()
-
-        tr_err = 0
-        tr_batch_n = 0
-        while True:
-            batches_gen = tr_q.get()
-            for batch in batches_gen:
-                inputs, targets = batch
-                err = tr_f(inputs, targets)
-                tr_err += err
-                tr_batch_n += 1
-                info("    [train batch %d/%s] err: %.4g    %s" %\
-                    (tr_batch_n, _str(n_tr_batches), err, 32*" "), end="\r")
-
-                its += 1
-                if max_its is not None and its > max_its:
-                    warn("\nWARNING: maximum number of iterations reached")
-                    done_looping = True
-                    end_reason = "max_its"
-                    return end_reason
-            n_tr_batches = tr_batch_n
-            tr_err /= n_tr_batches
-
-            if tr_stop.is_set():
-                del tr_q
-                del tr_stop
-                print("breaking tr...")
-                break
-
-        tr_data_thr.join()
-
+        tr_vals = run_epoch(tr_set, tr_f, batch_size,
+            async_data_load=async_data_load, info=epoch_info, warn=warn)
+        info("    train values:", _str_fmt_dct(tr_vals), 32*" ")
+ 
         if validation:
-            val_q = queue.Queue()
-            val_stop = threading.Event()
-            val_data_thr = threading.Thread(target=batches_gen_iter_async,
-                args=(val_q, val_stop, val_set, batch_size, True, info))
-            val_data_thr.start()
+            val_vals = run_epoch(val_set, val_f, batch_size,
+                async_data_load=async_data_load, info=epoch_info, warn=warn)
+            info("    val values:", _str_fmt_dct(val_vals), 32*" ")
 
-        val_err = 0
-        val_mae = 0
-        val_batch_n = 0
-        while True:
-            if not validation:
-                break
-
-            batches_gen = val_q.get()
-            for batch in batches_gen:
-                inputs, targets = batch
-                err, val_f_val = val_f(inputs, targets)
-                val_err += err
-                val_mae += val_f_val
-                val_batch_n += 1
-                info("    [val batch %d/%s] err: %.4g | val_f_val: %f   %s" %\
-                    (val_batch_n, _str(n_val_batches), err, val_f_val, 32*" "),
-                    end="\r")
-            n_val_batches = val_batch_n
-            val_err /= n_val_batches
-            val_mae /= n_val_batches
-
-            if last_val_mae is not None:
-                val_mae_diff = abs(val_mae - last_val_mae)
-                if val_f_val_tol is not None and val_mae_diff < val_f_val_tol:
-                    warn("\nWARNING: val_mae_diff=%f < val_f_val_tol=%f" %\
-                        (val_mae_diff, val_f_val_tol))
-                    done_looping = True
-                    end_reason = "val_f_val_tol"
-                    return end_reason
-
-            last_val_mae = val_mae
-
-            if val_stop.is_set():
-                del val_q
-                del val_stop
-                print("breaking val...")
-                break
-
-        if validation:
-            val_data_thr.join()
-
-        info("    elapsed time so far: %s" %\
-            _str_fmt_time(time.time() - start_time), end=32*" " + "\r")
-        info()
-        info("    train err: %.4g" % (tr_err))
-        if validation:
-            info("    val err: %.4g" % val_err, end="")
-            info(" | val mae: %.4g" % val_mae)
+        info("    time so far:", _str_fmt_time(time.time() - start_time))

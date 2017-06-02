@@ -103,11 +103,15 @@ def main():
     print("compiling functions...", flush=True)
     #compiling function performing a training step on a mini-batch (by giving
     #the updates dictionary) and returning the corresponding training loss
+    #train_fn = theano.function([input_var, target_var],
+    #    net_model.train_loss, updates=net_model.updates)
     train_fn = theano.function([input_var, target_var],
-        net_model.train_loss, updates=net_model.updates)
+        {"cc": net_model.train_loss}, updates=net_model.updates)
     #second function computing the validation loss and accuracy:
+    #val_fn = theano.function([input_var, target_var],
+    #    [net_model.test_loss, net_model.mae])
     val_fn = theano.function([input_var, target_var],
-        [net_model.test_loss, net_model.mae])
+        {"cc": net_model.test_loss, "mae": net_model.mae})
 
     print("getting data filepaths...", flush=True)
     #iterative loading of dataset from disk
@@ -136,7 +140,7 @@ def main():
             tr_set=tr_set, tr_f=train_fn,
             n_epochs=cfg.n_epochs, batch_size=cfg.batch_size,
             val_set=val_set, val_f=val_fn, val_f_val_tol=cfg.val_f_val_tol,
-            max_its=cfg.max_its,
+            async_data_load=cfg.async_data_load,
             verbose=cfg.verbose, print_f=log.print)
     except KeyboardInterrupt:
         print("Keyboard Interrupt event.")
