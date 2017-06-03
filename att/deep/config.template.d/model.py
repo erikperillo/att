@@ -26,6 +26,10 @@ def mae(pred, tgt):
     """Mean-absolute-error."""
     return T.mean(abs(pred - tgt))
 
+def mse(pred, tgt):
+    """Mean-squared-error."""
+    return lasagne.objectives.squared_error(pred, tgt).mean()
+
 def build_inception_module(name, input_layer, filter_sizes):
     #filter_sizes: (pool_proj, 1x1, 3x3_reduce, 3x3, 5x5_reduce, 5x5)
     net = {}
@@ -67,8 +71,8 @@ def build_inception_module(name, input_layer, filter_sizes):
 
 class Model:
     #in format depth, rows, cols
-    INPUT_SHAPE = (3, 192, 256)
-    OUTPUT_SHAPE = (1, 48, 64)
+    INPUT_SHAPE = (3, 480, 640)
+    OUTPUT_SHAPE = (1, 60, 80)
 
     def __init__(self, input_var=None, target_var=None, load_net_from=None):
         self.input_var = T.tensor4('inps') if input_var is None else input_var
@@ -87,23 +91,31 @@ class Model:
 
         #loss train/test symb. functionS
         self.train_loss = -cc(self.train_pred, self.target_var)
-        #self.train_loss = mse(self.train_pred, self.target_var)
         #optional regularization term
         #reg = lasagne.regularization.regularize_network_params(
         #    self.net["output"],
         #    lasagne.regularization.l2)
         #self.train_loss += reg*0.00001
         self.test_loss = -cc(self.test_pred, self.target_var)
-        #self.test_loss = mse(self.test_pred, self.target_var)
 
         #updates symb. function for gradient descent
         self.params = lasagne.layers.get_all_params(self.net["output"],
             trainable=True)
         self.updates = lasagne.updates.nesterov_momentum(
-            self.train_loss, self.params, learning_rate=0.02, momentum=0.9)
+            self.train_loss, self.params, learning_rate=0.001, momentum=0.9)
 
-        #mean absolute error
-        self.mae = mae(self.test_pred, self.target_var)
+        #train function
+        self.train_fn = theano.function(
+            inputs=[self.input_var, self.target_var],
+            outputs={"cc": self.train_loss},
+            updates=self.updates)
+        #val function
+        self.val_fn = theano.function(
+            inputs=[self.input_var, self.target_var],
+            outputs={
+                "cc": self.test_loss,
+                "mse": mse(self.test_pred, self.target_var)
+            })
 
     def get_net_model(self, input_var=None, inp_shp=None):
         """
@@ -121,15 +133,15 @@ class Model:
 
         #convpool layer
         net["conv1"] = lasagne.layers.Conv2DLayer(net["input"],
-            num_filters=24, filter_size=(7, 7), stride=1, flip_filters=False,
+            num_filters=48//2, filter_size=(7, 7), stride=2, flip_filters=False,
             nonlinearity=lasagne.nonlinearities.rectify,
             pad="same")
         net["conv2"] = lasagne.layers.Conv2DLayer(net["conv1"],
-            num_filters=24, filter_size=(5, 5), stride=1, flip_filters=False,
+            num_filters=48//2, filter_size=(5, 5), stride=1, flip_filters=False,
             nonlinearity=lasagne.nonlinearities.rectify,
             pad="same")
         net["conv3"] = lasagne.layers.Conv2DLayer(net["conv2"],
-            num_filters=24, filter_size=(3, 3), stride=1, flip_filters=False,
+            num_filters=48//2, filter_size=(3, 3), stride=1, flip_filters=False,
             nonlinearity=lasagne.nonlinearities.rectify,
             pad="same")
         net["pool1"] = lasagne.layers.MaxPool2DLayer(net["conv3"],
@@ -138,13 +150,14 @@ class Model:
         #inception layer
         net.update(build_inception_module("inception1",
             net["pool1"],
-            [16, 16, 16, 64//2, 32//2, 48//2])) #pool, 1x1, 3x3_red, 3x3, 5x5_red, 5x5
+             #pool, 1x1, 3x3_red, 3x3, 5x5_red, 5x5
+            [16, 16, 16, 64//2, 32//2, 48//2]))
         net.update(build_inception_module("inception2",
             net["inception1/output"],
-            [32//2, 32//2, 32//2, 64//2, 32//2, 48//2])) #pool, 1x1, 3x3_red, 3x3, 5x5_red, 5x5
+            [32//2, 32//2, 32//2, 64//2, 32//2, 48//2]))
         net.update(build_inception_module("inception3",
             net["inception2/output"],
-            [32//2, 32//2, 32//2, 64//2, 32//2, 48//2])) #pool, 1x1, 3x3_red, 3x3, 5x5_red, 5x5
+            [32//2, 32//2, 32//2, 64//2, 32//2, 48//2]))
         net["conv4"] = lasagne.layers.Conv2DLayer(net["inception3/output"],
             num_filters=96//2, filter_size=(1, 1), stride=1, flip_filters=False,
             nonlinearity=lasagne.nonlinearities.rectify,
@@ -163,7 +176,7 @@ class Model:
             pad="same")
         net.update(build_inception_module("inception4",
             net["conv6"],
-            [64//2, 64//2, 32//2, 128//2, 32//2, 96//2])) #pool, 1x1, 3x3_red, 3x3, 5x5_red, 5x5
+            [64//2, 64//2, 32//2, 128//2, 32//2, 96//2]))
 
         #output
         net["output"] = lasagne.layers.Conv2DLayer(net["inception4/output"],

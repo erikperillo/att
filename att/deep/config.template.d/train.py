@@ -7,29 +7,29 @@ from . import datapreproc
 _data_dir_path = "/home/erik/proj/att/att/deep/data"
 
 #if not None, uses weights of a pre-trained model from path
-pre_trained_model_fp = None
+pre_trained_model_fp = "/home/erik/proj/att/att/deep/data/train_56/model.npz"
 
 #directory where dir with train info/model will be stored
 output_dir_basedir = _data_dir_path
 
 _dataset_filepaths = glob.glob(os.path.join(_data_dir_path,
-    "salicon_dataset_lab", "data_part*.gz"))
+    "salicon_dataset_4", "data_part*.gz"))
 
 #filepaths of train batches
-dataset_train_filepaths = _dataset_filepaths[:-2][:2]
+dataset_train_filepaths = _dataset_filepaths[:2]
 #filepaths of validation batches, can be None
-dataset_val_filepaths = _dataset_filepaths[-2:]
+dataset_val_filepaths = _dataset_filepaths[2:3]
 #if not None, ignores dataset_{train,val}_filepaths and uses this as source
 dataset_filepath = None#_dataset_filepaths[-1]
 #validation fraction. ignored if dataset_filepath is not used
 val_frac = None#0.1
 
 #number of epochs to use in train
-n_epochs = 2
+n_epochs = 5
 #batch size
 batch_size = 10
 #if True, uses separate thread to load data batches
-async_data_load = False
+async_data_load = True
 #0 for nothing, 1 for only warnings, 2 for everything
 verbose = 2
 #validation function value tolerance

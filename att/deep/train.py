@@ -103,15 +103,12 @@ def main():
     print("compiling functions...", flush=True)
     #compiling function performing a training step on a mini-batch (by giving
     #the updates dictionary) and returning the corresponding training loss
-    #train_fn = theano.function([input_var, target_var],
-    #    net_model.train_loss, updates=net_model.updates)
-    train_fn = theano.function([input_var, target_var],
-        {"cc": net_model.train_loss}, updates=net_model.updates)
+    train_fn = net_model.train_fn
     #second function computing the validation loss and accuracy:
-    #val_fn = theano.function([input_var, target_var],
-    #    [net_model.test_loss, net_model.mae])
-    val_fn = theano.function([input_var, target_var],
-        {"cc": net_model.test_loss, "mae": net_model.mae})
+    val_fn = net_model.val_fn
+
+    #creating logging object
+    log = util.Tee([sys.stdout, open(os.path.join(out_dir, "train.log"), "w")])
 
     print("getting data filepaths...", flush=True)
     #iterative loading of dataset from disk
@@ -119,8 +116,8 @@ def main():
         print("using iterative loading of data from disk")
         tr_set = cfg.dataset_train_filepaths
         val_set = cfg.dataset_val_filepaths
-        print("train set:", tr_set)
-        print("validation set:", val_set)
+        log.print("train set:", tr_set)
+        log.print("validation set:", val_set)
     #single-time loading of dataset from disk
     else:
         print("using single-time loading of data from disk")
@@ -133,8 +130,6 @@ def main():
             val_set = None
 
     print("calling train loop")
-    #creating logging object
-    log = util.Tee([sys.stdout, open(os.path.join(out_dir, "train.log"), "w")])
     try:
         trloop.train_loop(
             tr_set=tr_set, tr_f=train_fn,

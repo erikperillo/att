@@ -18,7 +18,7 @@ output_dir_basedir = "/home/erik/proj/att/att/deep/data"
 #maximum number of samples to use, if None use all
 max_samples = None
 #save data in parts. if None, save everything in only one file.
-data_save_batch_size = 500
+data_save_batch_size = 1000
 
 #show images
 show_images = False

@@ -13,7 +13,7 @@ _data_dir_path = "/home/erik/proj/att/att/deep/data"
 dataset_stats_filepath = None#os.path.join(_data_dir_path,
     #"judd_cat2000_dataset/data_stats.pkl")
 #filepath of model
-model_filepath = os.path.join(_data_dir_path, "train_8", "model.npz")
+model_filepath = os.path.join(_data_dir_path, "train_51", "model.npz")
 
 #colorspace to transform image
 img_colspace = "lab"
@@ -38,4 +38,4 @@ save_preds = True
 show_images = False
 
 #maximum input shape, can be None
-max_img_shape = (240, 320)
+max_img_shape = (480, 640)
