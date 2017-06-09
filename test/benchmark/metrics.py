@@ -4,6 +4,7 @@ import scipy.io as sio
 import numpy as np
 import subprocess as sp
 import os.path as op
+import scipy.io as sio
 import sys
 import cv2
 
@@ -15,7 +16,12 @@ def std_norm(arr):
 def load_and_fit_dims(img_filepath_1, img_filepath_2,
     dtype=np.float32, load_code=0):
     img_1 = np.array(cv2.imread(img_filepath_1, load_code), dtype=dtype)
-    img_2 = np.array(cv2.imread(img_filepath_2, load_code), dtype=dtype)
+    if img_filepath_2.endswith(".mat"):
+        img_2 = sio.loadmat(img_filepath_2)
+        img_2 = img_2["fixLocs"]
+        img_2 = np.array(img_2, dtype=dtype)
+    else:
+        img_2 = np.array(cv2.imread(img_filepath_2, load_code), dtype=dtype)
 
     if img_1.shape != img_2.shape:
         img_1 = cv2.resize(img_1, img_2.shape[:2][::-1])
@@ -100,7 +106,7 @@ def cov(a, b):
     return ((a - a_mean)*(b - b_mean)).mean()
 
 def _cc(sal_map, gt_sal_map):
-    return cov(sal_map, gt_sal_map)/(gt_sal_map.std()*gt_sal_map.std())
+    return cov(sal_map, gt_sal_map)/(sal_map.std()*gt_sal_map.std())
 
 def cc(map_filepath, gt_map_filepath):
     map_img, gt_map_img = load_and_fit_dims(map_filepath, gt_map_filepath)
