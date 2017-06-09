@@ -58,7 +58,7 @@ def load_data(filepaths, q, stop, print_f=print):
     while i < len(filepaths):
         if stop.is_set():
             break
-        
+
         if q.empty():
             msg = "    [loading file '{}'...]".format(filepaths[i])
             print_f(msg, end="\r", flush=True)
@@ -125,7 +125,7 @@ def run_epoch(
 
     vals_mean = {k: v/n_its for k, v in vals_sum.items()}
     return vals_mean
- 
+
 def _str(obj):
     return str(obj) if obj is not None else "?"
 
@@ -181,7 +181,7 @@ def train_loop(
         tr_vals = run_epoch(tr_set, tr_f, batch_size,
             async_data_load=async_data_load, info=epoch_info, warn=warn)
         info("    train values:", _str_fmt_dct(tr_vals), 32*" ")
- 
+
         if validation:
             val_vals = run_epoch(val_set, val_f, batch_size,
                 async_data_load=async_data_load, info=epoch_info, warn=warn)

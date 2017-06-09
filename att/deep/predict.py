@@ -150,7 +150,6 @@ def main():
                 h, w = cfg.max_img_shape
                 scale = min(h/img.shape[0], w/img.shape[1])
                 img = nd.zoom(img, (scale, scale, 1), order=1)
-            print("OI2:", img.shape)
             pre_proc_img = img_pre_proc(img)
             print("\tpredicting...")
             pred, pred_time = predict(pre_proc_img, pred_f)
@@ -180,6 +179,7 @@ def main():
             print("\tsaving to '%s'" % to_save)
             #pylab.savefig(to_save)
             #print(pred.min(), pred.max(), pred.mean(), pred.std(), pred.shape)
+            pred = nd.zoom(pred, (8, 8), order=1)
             util.save_image(255*pred, to_save)
             util.save_image(img, os.path.basename(fp).split(".")[0]+"_g.jpg")
 

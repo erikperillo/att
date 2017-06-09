@@ -32,11 +32,13 @@ def main():
     target = T.tensor4("target")
 
     #neural network model
-    net_model = model.Model(inp, load_net_from=cfg.model_filepath)
+    net_model = model.Model(inp, target, load_net_from=cfg.model_filepath)
     #making prediction function
     #prediction function
     x = unit_norm(net_model.test_pred)
     y = unit_norm(target)
+
+    print(cfg.filepaths)
 
     eval_f = theano.function([inp, target],
         [EVAL_FUNCS[m](x, y) for m in cfg.metrics])
@@ -45,7 +47,7 @@ def main():
     counter = 0
 
     print("evaluating...")
-    for x, y in trloop.batches_gen_iter(cfg.filepaths, 1):
+    for i, (x, y) in trloop.batches_gen_iter(cfg.filepaths, 1):
         vals = eval_f(x, y)
         for i, m in enumerate(cfg.metrics):
             values[m] += vals[i]
