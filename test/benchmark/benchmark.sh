@@ -3,12 +3,6 @@
 #assumes all types (stimuli, ground-truth map/binary-mask have the same
 #filenames, except for possibly different extensions.
 
-#generate random data by calling gen_data
-do_gen_data=true
-#run model on pictures by calling run
-do_run=true
-#measure metrics by calling bm
-do_bm=true
 #compute metrics stats by calling stats
 do_stats=true
 
