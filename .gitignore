@@ -16,3 +16,5 @@ att/deep/exps/
 doc/*
 !test/imgs
 !doc/Doxyfile
+imgs/
+preds/
