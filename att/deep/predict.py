@@ -117,7 +117,7 @@ def img_filepath_to_fixmap_filepath(filepath, ext="png"):
         path = ".".join(filepath.split(".")[:-1])
     else:
         path = filepath
-    path = os.path.basename(path + "_fixmap." + ext)
+    path = os.path.basename(path + "." + ext)
     return os.path.join(os.getcwd(), path)
 
 def main():
