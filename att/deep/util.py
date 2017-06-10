@@ -7,7 +7,8 @@ import sys
 import datetime
 import subprocess as sp
 import numpy as np
-from PIL import Image
+import skimage.io as ski_io
+import skimage.transform as ski_tf
 import pickle
 import gzip
 import bz2
@@ -92,27 +93,42 @@ def unpkl(filepath):
     with open_mp(filepath, "rb") as f:
         return pickle.load(f)
 
-def load_image(filepath):
+def load_image(filepath, gray=False, dtype="float32", **kwargs):
     """
     Loads image in RGB format from filepath.
     """
-    img = np.asarray(Image.open(filepath).convert("RGB"))
+    img = ski_io.imread(filepath, as_grey=as_gray, **kwargs).astype(dtype)
     return img
 
-def save_image(img, filepath):
+def save_image(img, filepath, quality=80):
     """
     Saves image to filepath.
     Assumes image shape in format (h, w[, c]).
     """
-    #adjusting shape
-    if len(img.shape) > 2 and img.shape[2] == 1:
-        img = img.reshape(img.shape[:2])
-    grayscale = len(img.shape) < 3
     #converting to adequate format
-    img = np.clip(img, 0, 255).astype("uint8")
-    img = Image.fromarray(img, mode="L" if grayscale else "RGB")
-    #saving
-    img.save(filepath)
+    ski_io.imsave(filepath, img.astype("uint8"), quality=quality)
+
+def resize_image(img, shape, **kwargs):
+    """
+    Resizes image.
+    """
+    old_dtype = img.dtype
+    old_max = img.max()
+    img = img.astype("float32")/img.max()
+    img = ski_tf.resize(img, shape, **kwargs)
+    img = ((old_max/img.max())*img).astype(old_dtype)
+    return img
+
+def rescale_image(img, scale, **kwargs):
+    """
+    Rescales image.
+    """
+    old_dtype = img.dtype
+    old_max = img.max()
+    img = img.astype("float32")/img.max()
+    img = ski_tf.rescale(img, scale, **kwargs)
+    img = ((old_max/img.max())*img).astype(old_dtype)
+    return img
 
 def txt_to_dict(info_file_path, sep=":"):
     """

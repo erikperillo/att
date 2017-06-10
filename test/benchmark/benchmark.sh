@@ -13,7 +13,7 @@ maps_dir="/home/erik/test"
 main_dir=$maps_dir
 
 #result images format
-map_ext=".jpg"
+map_ext=".jpeg"
 
 #use ground-truth fixation points
 use_gt_points=true

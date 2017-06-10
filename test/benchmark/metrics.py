@@ -6,7 +6,9 @@ import subprocess as sp
 import os.path as op
 import scipy.io as sio
 import sys
-import cv2
+import os
+sys.path.append(os.path.join("..", "..", "att", "deep"))
+import util
 
 def std_norm(arr):
     sigma = arr.std()
@@ -14,17 +16,20 @@ def std_norm(arr):
     return (arr - u)/(sigma if sigma else 1)
 
 def load_and_fit_dims(img_filepath_1, img_filepath_2,
-    dtype=np.float32, load_code=0):
-    img_1 = np.array(cv2.imread(img_filepath_1, load_code), dtype=dtype)
+    dtype=np.float32, gray=True):
+    img_1 = util.load_image(img_filepath_1, gray=gray, dtype=dtype)
     if img_filepath_2.endswith(".mat"):
         img_2 = sio.loadmat(img_filepath_2)
-        img_2 = img_2["fixLocs"]
+        try:
+            key = [k for k in img_2.keys() if not k.startswith("__")][0]
+        except IndexError:
+            raise ValueError(".mat file did not contain any data")
         img_2 = np.array(img_2, dtype=dtype)
     else:
-        img_2 = np.array(cv2.imread(img_filepath_2, load_code), dtype=dtype)
+        img_2 = util.load_image(img_filepath_2, gray=gray, dtype=dtype)
 
     if img_1.shape != img_2.shape:
-        img_1 = cv2.resize(img_1, img_2.shape[:2][::-1])
+        img_1 = util.resize_image(img_1, img_2.shape[:2])
 
     return img_1, img_2
 
