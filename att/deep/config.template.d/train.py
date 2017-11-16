@@ -7,13 +7,13 @@ from . import datapreproc
 _data_dir_path = "/home/erik/proj/att/att/deep/data"
 
 #if not None, uses weights of a pre-trained model from path
-pre_trained_model_fp = "/home/erik/proj/att/att/deep/data/train_56/model.npz"
+pre_trained_model_fp = None
 
 #directory where dir with train info/model will be stored
 output_dir_basedir = _data_dir_path
 
 _dataset_filepaths = glob.glob(os.path.join(_data_dir_path,
-    "salicon_dataset_4", "data_part*.gz"))
+    "salicon_dataset_8", "data_part*.gz"))
 
 #filepaths of train batches
 dataset_train_filepaths = _dataset_filepaths[:2]
