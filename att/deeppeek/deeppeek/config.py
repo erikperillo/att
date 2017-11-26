@@ -70,7 +70,7 @@ random.seed(42)
 random.shuffle(_fps)
 _train_fps = _fps[:14000]
 _val_fps = _fps[14000:]
-_test_fps = []
+_test_fps = glob.glob(os.path.join(_train_input_dir, "judd", "stimuli", "*"))
 
 #augment function
 _augment = lambda xy: augment.augment(xy, _augment_op_seqs, apply_on_y=True)
@@ -121,7 +121,7 @@ train = {
     #arguments to be provided by trloop.batch_gen function
     "batch_gen_kw": {
         #size of batch to be fed to model
-        "batch_size": 16,
+        "batch_size": 12,
 
         #number of fetching threads for data loading/pre-processing/augmentation
         "n_threads": 10,
@@ -163,11 +163,10 @@ infer = {
     "shuffle_input_fps": True,
 
     #path to directory containing meta-graph and weights for model
-    "model_path": \
-        "/home/erik/rand/traindata/model-131/data/self/final",
+    "model_path": os.path.join(_model_data_dir, "ckpts", "best"),
 
     #base dir where new preds directory will be created
-    "preds_save_dir_basedir": "/home/erik/rand/preds",
+    "preds_save_dir_basedir": os.path.join(_train_output_dir, "inferences"),
 
     #if true, creates table.npz, containing x_fps, y_pred (and possibly y_true)
     "save_tables": not True,
@@ -179,5 +178,5 @@ infer = {
     "max_pred_points": 9999999,
 
     #maximum number of preds to save, can be None
-    "max_n_preds_save": 30,
+    "max_n_preds_save": 999999,
 }

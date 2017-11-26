@@ -72,10 +72,10 @@ def train_load(fp):
     return _load_salicon(fp)
 
 def infer_load(fp):
-    #return _load_judd(fp)
     return _load_judd(fp)
+    #return _load_salicon(fp)
 
-def _pre_proc(x, y=None, resize=False):
+def _pre_proc(x, y=None, resize=False, cut=True):
     x = x.swapaxes(0, 1).swapaxes(1, 2)
     #converting images to float
     x = img_as_float(x)
@@ -86,8 +86,15 @@ def _pre_proc(x, y=None, resize=False):
 
     #reshaping to fix max input shape if necessary
     h, w = x.shape[:2]
-    max_h, max_w = (240, 320)
+    max_h, max_w = (256, 320)
     max_ratio = max(h/max_h, w/max_w)
+    #cutting to match ratio
+    if cut:
+        r = max_w/max_h
+        x = x[:int(w/r), ...]
+        if y is not None:
+            y = y[:int(w/r), ...]
+    #resizing
     if resize:
         x = transf.resize(x, (max_h, max_w), mode="constant")
         if y is not None:
@@ -101,12 +108,12 @@ def _pre_proc(x, y=None, resize=False):
     x = color.rgb2lab(x)
 
     #preparing shapes to be divisable by 2^3
-    h, w = x.shape[:2]
-    x = x[h%8:, w%8:]
+    #h, w = x.shape[:2]
+    #x = x[h%8:, w%8:]
     if y is not None:
-        y = y[h%8:, w%8:]
-        #reshaping y
-        y = transf.resize(y, (h//8, w//8), mode="constant")
+    #    y = y[h%8:, w%8:]
+    #    #reshaping y
+    #    y = transf.resize(y, (h//8, w//8), mode="constant")
         #normalizing y
         y = _unit_norm(y)
 
@@ -128,9 +135,10 @@ def train_pre_proc(batch_xy):
     return batch_xy
 
 def infer_pre_proc(x):
-    return _pre_proc(x, resize=False)
+    return _pre_proc(x, resize=True, cut=False)
 
 def infer_save_x(x, preds_dir, name):
+    return
     fp = util.uniq_path(preds_dir, name + "_x", ext=".png")
     x = np.moveaxis(x, 0, -1)
     print("x shp...", x.shape)
@@ -138,7 +146,6 @@ def infer_save_x(x, preds_dir, name):
 
 def infer_save_y_pred(y_pred, preds_dir, name):
     fp = util.uniq_path(preds_dir, name + "_y-pred", ext=".png")
-    y_pred = transf.rescale(y_pred, 8, mode="constant")
     y_pred = 255*_unit_norm(y_pred)
     io.imsave(fp, y_pred.clip(0, 255).astype("uint8"))
 
