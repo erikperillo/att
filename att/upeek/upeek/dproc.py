@@ -32,6 +32,7 @@ from skimage import color
 from skimage import img_as_float
 
 import numpy as np
+import math
 
 import glob
 import os
@@ -67,12 +68,20 @@ def _load_judd(fp_or_fps):
     y = y.reshape((1, ) + y.shape)
     return x, y
 
+def _load_mit300(fp):
+    x = io.imread(fp)
+    if x.ndim < 3:
+        x = np.dstack(3*(x, ))
+    x = x.swapaxes(2, 1).swapaxes(1, 0)
+    return x, None
+
 def train_load(fp):
-    #return _load_judd(fp)
-    return _load_salicon(fp)
+    return _load_judd(fp)
+    #return _load_salicon(fp)
 
 def infer_load(fp):
-    return _load_judd(fp)
+    return _load_mit300(fp)
+    #return _load_judd(fp)
     #return _load_salicon(fp)
 
 def _pre_proc(x, y=None, resize=False, cut=True):
@@ -103,6 +112,15 @@ def _pre_proc(x, y=None, resize=False, cut=True):
         x = transf.rescale(x, 1/max_ratio, mode="constant")
         if y is not None:
             y = transf.rescale(y, 1/max_ratio, mode="constant")
+
+    if not cut:
+        h, w = x.shape[:2]
+        h_rest = math.ceil(h/32)*32 - h
+        w_rest = math.ceil(w/32)*32 - w
+        if h_rest > 0:
+            x = np.vstack([x, np.zeros(shape=(h_rest, w, 3))])
+        if w_rest > 0:
+            x = np.hstack([x, np.zeros(shape=(h+h_rest, w_rest, 3))])
 
     #converting x colorspace to LAB
     x = color.rgb2lab(x)
@@ -135,7 +153,7 @@ def train_pre_proc(batch_xy):
     return batch_xy
 
 def infer_pre_proc(x):
-    return _pre_proc(x, resize=True, cut=False)
+    return _pre_proc(x, resize=False, cut=False)
 
 def infer_save_x(x, preds_dir, name):
     return
@@ -147,7 +165,7 @@ def infer_save_x(x, preds_dir, name):
 def infer_save_y_pred(y_pred, preds_dir, name):
     fp = util.uniq_path(preds_dir, name + "_y-pred", ext=".png")
     y_pred = 255*_unit_norm(y_pred)
-    io.imsave(fp, y_pred.clip(0, 255).astype("uint8"))
+    io.imsave(fp, y_pred.clip(0, 255).astype("uint8"), quality=100)
 
 def infer_save_y_true(y_true, preds_dir, name):
     fp = util.uniq_path(preds_dir, name + "_y-true", ext=".png")

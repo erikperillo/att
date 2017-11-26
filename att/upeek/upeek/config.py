@@ -65,12 +65,15 @@ _train_output_dir = os.environ.get("TRAIN_OUTPUT_DIR_PATH",
     os.path.join(os.environ["HOME"], "data", "deeppeek", "train"))
 
 #filepaths
-_fps = glob.glob(os.path.join(_train_input_dir, "salicon", "maps", "*.jpg"))
+#_fps = glob.glob(os.path.join(_train_input_dir, "salicon", "maps", "*.jpg"))
+_fps = glob.glob(os.path.join(_train_input_dir, "judd", "stimuli", "*"))
 random.seed(42)
 random.shuffle(_fps)
-_train_fps = _fps[:14000]
-_val_fps = _fps[14000:]
-_test_fps = glob.glob(os.path.join(_train_input_dir, "judd", "stimuli", "*"))
+_train_fps = _fps[:875]
+_val_fps = _fps[875:]
+#_test_fps = glob.glob(os.path.join(_train_input_dir, "judd", "stimuli", "*"))
+_test_fps = glob.glob(os.path.join(_train_input_dir, "mit_300",
+    "BenchmarkIMAGES", "BenchmarkIMAGES", "*.jpg"))
 
 #augment function
 _augment = lambda xy: augment.augment(xy, _augment_op_seqs, apply_on_y=True)
@@ -87,10 +90,11 @@ train = {
     #path to directory containing data needed by tensorflow's SavedModel
     #can be None
     "pre_trained_model_path": \
-        None,
+        #None,
+        os.path.join(_model_data_dir, "ckpts", "best"),
 
     #learning rate of the model
-    "learning_rate": 3e-4,
+    "learning_rate": 1e-4,
 
     #list with filepaths of train files
     "train_set_fps": _train_fps,

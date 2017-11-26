@@ -93,13 +93,17 @@ def main():
 
     with tf.Session(graph=tf.Graph()) as sess:
         #loading model weights
+        print("loading model", flush=True)
         model.load(sess, conf["model_path"])
+        print("setting params", flush=True)
         meta_model.set_params_from_colls()
 
         #building functions
+        print("getting pred fn", flush=True)
         _pred_fn = meta_model.get_pred_fn(sess)
         pred_fn = lambda x: predict(x, _pred_fn)
 
+        print("iterating", flush=True)
         indexes = None
         #iterating over images doing predictions
         for i, fp in enumerate(input_fps):
