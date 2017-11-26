@@ -22,8 +22,11 @@ if [ "$type" = "patch" ]; then
     patch=$(($patch + 1))
 elif [ "$type" = "minor" ]; then
     minor=$(($minor + 1))
+    patch=0
 elif [ "$type" = "major" ]; then
     major=$(($major + 1))
+    minor=0
+    patch=0
 else
     error "version must be one in {patch, minor, major}"
 fi
