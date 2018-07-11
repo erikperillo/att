@@ -29,6 +29,33 @@ import datetime as dt
 import subprocess as sp
 import glob
 
+def get_paths(list_or_path):
+    """
+    Gets elements list from argument.
+    If it isn't a list already, it's asssumed to be a path (str).
+    If the path ends with .csv, it's considered a path to a list
+    and then it's read line-by-line.
+    If it does not end with an extension in list_fmts and is a directory,
+    gets all files in the directory.
+    If it does not end with an extension in list_fmts and is not a directory,
+    considers it's a single path and returns a single-element list.
+    """
+    if isinstance(list_or_path, list):
+        paths = list_or_path
+    elif isinstance(list_or_path, str):
+        if list_or_path.endswith(".csv"):
+            with open(list_or_path, "r") as f:
+                paths = [l.strip() for l in f]
+        elif os.path.isdir(list_or_path):
+            paths = glob.glob(os.path.join(list_or_path, "*"))
+        else:
+            paths = [list_or_path]
+    else:
+        raise ValueError(
+            "list_or_path must be either a list or a valid path to file/dir")
+    #paths = [os.path.abspath(p) for p in paths]
+    return paths
+
 def git_hash():
     """
     Gets git commit hash of project.
@@ -59,7 +86,7 @@ def uniq_name(dir_path, pattern, ext=""):
     files = [f for f in os.listdir(dir_path) if \
              os.path.exists(os.path.join(dir_path, f))]
     num = len([f for f in files if f.startswith(pattern)])
-    filename = pattern + (("-" + str(num)) if num else "") + ext
+    filename = "{}-{}".format(pattern, num + 1) + ext
     return filename
 
 def uniq_path(dir_path, pattern, ext=""):

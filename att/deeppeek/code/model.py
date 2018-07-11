@@ -31,6 +31,10 @@ import numpy as np
 import shutil
 import os
 
+#shapes of input (x) and output (y) tensors
+X_SHAPE = (None, 3, 240, 320)
+Y_SHAPE = (None, 1, 30, 40)
+
 def get_param_from_coll(coll_key, index=0, max_coll_size=1, graph=None):
     """
     Gets index'th parameter from collection 'coll_key' in graph.
@@ -78,114 +82,122 @@ def _var_summaries(var):
         tf.summary.scalar("min", tf.reduce_min(var))
         tf.summary.histogram("histogram", var)
 
-def _conv(*args, **kwargs):
-    return tf.layers.conv2d(*args, **kwargs)
-
-def _upconv(*args, **kwargs):
-    return tf.layers.conv2d_transpose(*args, **kwargs)
-
-def _max_pool(*args, **kwargs):
-    return tf.layers.max_pooling2d(*args, **kwargs)
-
-def _batch_norm(*args, **kwargs):
-    return tf.layers.batch_normalization(*args, **kwargs)
-
-def _concat(*args, **kwargs):
-    return tf.concat(*args, **kwargs)
-
-def _batch_norm_conv(net, training, *args, **kwargs):
-    with tf.name_scope("batch_norm-conv"):
-        net = _batch_norm(net, training=training)
-        net = _conv(net, *args, **kwargs)
+def conv(net, *args, **kwargs):
+    with tf.name_scope("conv"):
+        net = tf.layers.conv2d(net, *args, **kwargs)
     return net
 
-def _batch_norm_upconv(net, training, *args, **kwargs):
-    with tf.name_scope("batch_norm-upconv"):
-        net = _batch_norm(net, training=training)
-        net = _upconv(net, *args, **kwargs)
+def max_pool(net, *args, **kwargs):
+    with tf.name_scope("max_pool"):
+        net = tf.layers.max_pooling2d(net, *args, **kwargs)
     return net
 
-def _inception(
+def batch_norm(net, *args, **kwargs):
+    with tf.name_scope("batch_norm"):
+        net = tf.layers.batch_normalization(net, *args, **kwargs)
+    return net
+
+def concat(lst):
+    with tf.name_scope("concat"):
+        net = tf.concat(lst, axis=-1)
+    return net
+
+def inception(
         net,
         pool_red,
         conv1x1,
         conv3x3_red, conv3x3,
-        dualconv3x3_red, dualconv3x3):
+        conv5x5_red, conv5x5
+    ):
     with tf.name_scope("inception"):
-        pool_layer = _max_pool(net,
+        pool_layer = max_pool(net,
             pool_size=(2, 2), strides=(1, 1), padding="same")
-        pool_layer = _conv(pool_layer, filters=pool_red,
+        pool_layer = conv(pool_layer, filters=pool_red,
             kernel_size=(1, 1), activation=tf.nn.relu, padding="same")
 
-        conv1x1_layer = _conv(net, filters=conv1x1,
+        conv1x1_layer = conv(net, filters=conv1x1,
             kernel_size=(1, 1), activation=tf.nn.relu, padding="same")
 
-        conv3x3_layer = _conv(net, filters=conv3x3_red,
+        conv3x3_layer = conv(net, filters=conv3x3_red,
             kernel_size=(1, 1), activation=tf.nn.relu, padding="same")
-        conv3x3_layer = _conv(conv3x3_layer, filters=conv3x3,
+        conv3x3_layer = conv(conv3x3_layer, filters=conv3x3,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
 
-        dualconv3x3_mid = int(
-            dualconv3x3_red*(dualconv3x3/dualconv3x3_red)**0.5)
-        dualconv3x3_layer = _conv(net, filters=dualconv3x3_red,
+        conv5x5_layer = conv(net, filters=conv5x5_red,
             kernel_size=(1, 1), activation=tf.nn.relu, padding="same")
-        dualconv3x3_layer = _conv(dualconv3x3_layer, filters=dualconv3x3_mid,
-            kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        dualconv3x3_layer = _conv(dualconv3x3_layer, filters=dualconv3x3,
-            kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
+        conv5x5_layer = conv(conv5x5_layer, filters=conv5x5,
+            kernel_size=(5, 5), activation=tf.nn.relu, padding="same")
 
-        concat_layer = tf.concat(
-            [pool_layer, conv1x1_layer, conv3x3_layer, dualconv3x3_layer],
-            axis=-1)
+        concat_layer = concat(
+            [pool_layer, conv1x1_layer, conv3x3_layer, conv5x5_layer])
 
     return concat_layer
 
-def _deeppeek(x, training=None):
+def deeppeek(net, training=None):
     with tf.name_scope("deeppeek"):
         #first layer
-        net = x
-        net = _conv(net, filters=48,
+        net = conv(net, filters=48,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _max_pool(net,
+        net = max_pool(net,
             pool_size=(2, 2), strides=(2, 2))
 
         #second layer
-        net = _conv(net, filters=64,
+        net = conv(net, filters=64,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _conv(net, filters=96,
+        net = conv(net, filters=96,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _max_pool(net,
+        net = max_pool(net,
             pool_size=(2, 2), strides=(2, 2))
 
         #third layer
-        net = _conv(net, filters=128,
+        net = conv(net, filters=128,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _conv(net, filters=128,
+        net = conv(net, filters=128,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _conv(net, filters=144,
+        net = conv(net, filters=144,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _conv(net, filters=144,
+        net = conv(net, filters=144,
             kernel_size=(3, 3), activation=tf.nn.relu, padding="same")
-        net = _max_pool(net,
+        net = max_pool(net,
             pool_size=(2, 2), strides=(2, 2))
 
         #fourth layer
-        net = _inception(net, 96, 128, 96, 192, 48, 96)
-        net = _inception(net, 64, 128, 80, 160, 24, 48)
-        net = _inception(net, 64, 128, 80, 160, 24, 48)
-        net = _inception(net, 64, 128, 96, 192, 28, 56)
-        net = _inception(net, 64, 128, 96, 192, 28, 56)
-        net = _inception(net, 64, 128, 112, 224, 32, 64)
-        net = _inception(net, 64, 128, 112, 224, 32, 64)
-        net = _inception(net, 112, 160, 128, 256, 40, 80)
+        net = inception(net, 96, 128, 96, 192, 48, 96)
+        net = inception(net, 64, 128, 80, 160, 24, 48)
+        net = inception(net, 64, 128, 80, 160, 24, 48)
+        net = inception(net, 64, 128, 96, 192, 28, 56)
+        net = inception(net, 64, 128, 96, 192, 28, 56)
+        net = inception(net, 64, 128, 112, 224, 32, 64)
+        net = inception(net, 64, 128, 112, 224, 32, 64)
+        net = inception(net, 112, 160, 128, 256, 40, 80)
 
         #last layer
-        net = _conv(net, filters=1,
-            kernel_size=(1, 1), activation=tf.nn.relu, padding="same")
+        logits = conv(net, filters=1,
+            kernel_size=(1, 1), activation=None, padding="same")
+        net = tf.nn.sigmoid(logits)
 
-    return net
+    return logits, net
 
-def _build_graph():
+def _get_stats_tensors(stats_dct, dtype="float32"):
+    """
+    Converts a dictionary of statistics into tensors mean and std.
+    stats_dct is assumed to be a dict in format:
+    {band_index: {'mean': band_mean, 'std': band_std}}
+    for each band of the image.
+    """
+    assert all("mean" in sub_dct for sub_dct in stats_dct.values())
+    assert all("std" in sub_dct for sub_dct in stats_dct.values())
+    mean = [[[]] for __ in range(len(stats_dct))]
+    std = [[[]] for __ in range(len(stats_dct))]
+    for k, sub_dct in stats_dct.items():
+        index = int(k)
+        mean[index][0].append(float(sub_dct["mean"]))
+        std[index][0].append(float(sub_dct["std"]))
+    mean = tf.constant(mean, name="train_set_mean", dtype=dtype)
+    std = tf.constant(std, name="train_set_std", dtype=dtype)
+    return mean, std
+
+def _build_graph(stats=None):
     """
     Builds graph.
     This function must return a dictionary with values
@@ -193,32 +205,38 @@ def _build_graph():
     """
     params = {}
     #placeholders
-    params["x"] = tf.placeholder("float32",
-        shape=(None, 3, None, None), name="x")
-    params["y_true"] = tf.placeholder("float32",
-        shape=(None, 1, None, None), name="y_true")
+    params["x"] = tf.placeholder("float32", shape=X_SHAPE, name="x")
+    params["y_true"] = tf.placeholder("float32", shape=Y_SHAPE, name="y_true")
+
+    #pre-processing x
+    if stats is not None:
+        mean, std = _get_stats_tensors(stats)
+        params["x_pre_proc"] = (params["x"] - mean)/std
+    else:
+        params["x_pre_proc"] = params["x"]
 
     #transposing
-    x = tf.transpose(params["x"], [0, 2, 3, 1])
+    x_pre_proc = tf.transpose(params["x_pre_proc"], [0, 2, 3, 1])
     y_true = tf.transpose(params["y_true"], [0, 2, 3, 1])
 
     #learning phase
     params["learning_phase"] = tf.placeholder("bool")
 
-    #net = unit_norm(net)
-    y_pred = _deeppeek(x)
+    #building net
+    logits, y_pred = deeppeek(x_pre_proc, training=params["learning_phase"])
 
     #counting number of params
     print("n. params: {}".format(
         np.sum(
             [np.product(
-                [xi.value for xi in x.get_shape()])\
-            for x in tf.global_variables()])))
+                [vi.value for vi in v.get_shape()])\
+            for v in tf.global_variables()])))
 
     params["y_pred"] = tf.transpose(y_pred, [0, 3, 1, 2], name="y_pred")
 
     #cost function
-    _loss = tf.losses.mean_squared_error(labels=y_true, predictions=y_pred)
+    _loss = tf.nn.sigmoid_cross_entropy_with_logits(
+        labels=y_true, logits=logits)
     params["loss"] = tf.reduce_mean(_loss, name="loss")
 
     params["learning_rate"] = tf.placeholder("float32")
@@ -246,6 +264,8 @@ class MetaModel:
     PARAMS_KEYS = {
         #input placeholder tensor
         "x",
+        #deeppek input, possibly pre-processed x
+        "x_pre_proc",
         #prediction placeholder tensor
         "y_pred",
         #placeholder for true value of y
@@ -266,11 +286,12 @@ class MetaModel:
     def get_coll_key_for_param(param_name):
         return "/".join([MetaModel.NAME, "params", param_name])
 
-    def __init__(self):
+    def __init__(self, stats=None):
         """
         Initialization of metamodel.
         Every value except for metrics is a tensorflow op/tensor of the graph:
             x: input tensor.
+            x_pre_proc: (maybe) pre-processed input tensor, the net input.
             y_pred: output tensor, prediction
             y_true: placeholder for true data to be used for comparisons.
             loss: loss function to be optimized during training.
@@ -279,6 +300,7 @@ class MetaModel:
             metrics: a dict in format metric_name: metric_tensor.
         """
         self.params = {}
+        self.stats = stats
 
     def build_graph(self, pre_graph=tf.Graph()):
         """
@@ -286,7 +308,7 @@ class MetaModel:
         """
         graph = tf.get_default_graph() if pre_graph is None else pre_graph
         with graph.as_default():
-            self.params = _build_graph()
+            self.params = _build_graph(stats=self.stats)
         assert set(self.params.keys()) == MetaModel.PARAMS_KEYS
         return graph
 
@@ -308,6 +330,8 @@ class MetaModel:
                     self.params["y_true"], [0, 2, 3, 1]), max_outputs=4)
             tf.summary.image("pred", tf.transpose(
                     self.params["y_pred"], [0, 2, 3, 1]), max_outputs=4)
+            tf.summary.image("x", tf.transpose(
+                    self.params["x"], [0, 2, 3, 1]), max_outputs=4)
 
         #other params summaries
         for k in {"x", "y_pred", "y_true"}:

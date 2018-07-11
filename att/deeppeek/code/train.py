@@ -3,7 +3,7 @@
 """
 The MIT License (MIT)
 
-Copyright (c) 2017 Erik Perillo <erik.perillo@gmail.com>
+Copyright (c) 2017, 2018 Erik Perillo <erik.perillo@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,19 +24,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 """
 
+import numpy as np
+import random
+from config import train as conf
+
+random.seed(conf["rand_seed"])
+np.random.seed(conf["rand_seed"] + 1)
+
 import subprocess as sp
 import tensorflow as tf
 import os
 import sys
 import shutil
+import argparse
 from collections import OrderedDict
 
 import model
 import trloop
-import config as conf
 import util
 
-def populate_out_dir(out_dir):
+def populate_out_dir(out_dir, train_set, val_set):
     """
     Populates output dir with info files.
     """
@@ -48,29 +55,54 @@ def populate_out_dir(out_dir):
 
     #saving train/val filepaths
     with open(os.path.join(out_dir, "input", "train.csv"), "w") as f:
-        for fp in conf.train["train_set_fps"]:
-            print(fp, file=f)
+        for path in train_set:
+            print(path, file=f)
 
     with open(os.path.join(out_dir, "input", "val.csv"), "w") as f:
-        for fp in conf.train["val_set_fps"]:
-            print(fp, file=f)
+        for path in val_set:
+            print(path, file=f)
 
-def main():
-    out_dir = util.mk_model_dir(conf.train["out_dir_basedir"])
+def train():
+    #parsing possible command-line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output_dir_path", type=str, nargs="?", 
+        help="path to directory to save train data",
+        default=conf["output_dir_path"])
+    parser.add_argument("--pre_trained_model_path", type=str, nargs="?", 
+        help="path to pre-trained model",
+        default=conf["pre_trained_model_path"])
+    parser.add_argument("--train_set", type=str, nargs="?", 
+        help="path to csv list of train set paths",
+        default=conf["train_set"])
+    parser.add_argument("--val_set", type=str, nargs="?", 
+        help="path to csv list of validation set paths",
+        default=conf["val_set"])
+    args = parser.parse_args()
+
+    #getting output_dir_path
+    output_dir_path = args.output_dir_path
+    #getting pre_trained_model_path
+    pre_trained_model_path = args.pre_trained_model_path
+    #getting train_set
+    train_set = util.get_paths(args.train_set)
+    #getting val
+    val_set = util.get_paths(args.val_set)
+
+    out_dir = util.mk_model_dir(output_dir_path)
     print("created out dir '{}', populating...".format(out_dir),
         flush=True, end=" ")
-    populate_out_dir(out_dir)
+    populate_out_dir(out_dir, train_set, val_set)
     print("done.")
 
     #meta-model
-    meta_model = model.MetaModel()
+    meta_model = model.MetaModel(**conf["meta_model_kwargs"])
 
     #creating logging object
     log = util.Tee([sys.stdout,
         open(os.path.join(out_dir, "etc", "train-log", "train.log"), "w")])
 
     #building graph
-    if conf.train["pre_trained_model_path"] is None:
+    if pre_trained_model_path is None:
         log.print("[info] building graph for the first time")
         graph = meta_model.build_graph()
     else:
@@ -81,9 +113,12 @@ def main():
 
     #training session
     with tf.Session(graph=graph) as sess:
+        #setting tensorflow random seed
+        tf.set_random_seed(0)
+
         #if first time training, creates graph collections for model params
         #else, loads model weights and params from collections
-        if conf.train["pre_trained_model_path"] is None:
+        if pre_trained_model_path is None:
             #sess.run(tf.global_variables_initializer())
             sess.run(
                 tf.group(
@@ -92,8 +127,8 @@ def main():
             meta_model.mk_params_colls(graph=graph)
         else:
             log.print("[info] loading graph/weights from '{}'".format(
-                conf.train["pre_trained_model_path"]))
-            model.load(sess, conf.train["pre_trained_model_path"])
+                pre_trained_model_path))
+            model.load(sess, pre_trained_model_path)
             meta_model.set_params_from_colls(graph=graph)
 
         #building functions
@@ -101,7 +136,7 @@ def main():
         _train_fn = meta_model.get_train_fn(sess)
         def train_fn(x, y_true):
             return _train_fn(x, y_true, {
-                meta_model.params["learning_rate"]: conf.train["learning_rate"]
+                meta_model.params["learning_rate"]: conf["learning_rate"]
             })
 
         #test function: returns a dict with pairs metric_name: metric_value
@@ -122,15 +157,16 @@ def main():
             print("    saved checkpoint to '{}'".format(path))
 
         #test
-        if conf.train["use_tensorboard"]:
+        if conf["use_tensorboard"]:
             #tensorboard summary writers
             train_writer = tf.summary.FileWriter(
                 os.path.join(summ_dir, "train"), graph=graph)
             val_writer = tf.summary.FileWriter(
                 os.path.join(summ_dir, "val"), graph=graph)
             #running tensorboard
-            cmd = ["tensorboard", "--logdir={}".format(summ_dir),
-                "--port={}".format(conf.train["tensorboard_port"])]
+            cmd = ["tensorboard", "--logdir={}".format(summ_dir)]
+            cmd.extend("--{}={}".format(k, v) \
+                for k, v in conf["tensorboard_params"].items())
             log.print("[info] running '{}'".format(" ".join(cmd)))
             proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
 
@@ -152,26 +188,26 @@ def main():
         print("calling train loop")
         try:
             trloop.train_loop(
-                train_set=conf.train["train_set_fps"],
+                train_set=train_set,
                 train_fn=train_fn,
-                n_epochs=conf.train["n_epochs"],
-                val_set=conf.train["val_set_fps"],
+                n_epochs=conf["n_epochs"],
+                val_set=val_set,
                 val_fn=test_fn,
-                val_every_its=conf.train["val_every_its"],
-                patience=conf.train["patience"],
-                log_every_its=conf.train["log_every_its"],
+                val_every_its=conf["val_every_its"],
+                patience=conf["patience"],
+                log_every_its=conf["log_every_its"],
                 log_fn=log_fn,
                 save_model_fn=save_model_fn,
-                save_every_its=conf.train["save_every_its"],
-                verbose=conf.train["verbose"],
+                save_every_its=conf["save_every_its"],
+                verbose=conf["verbose"],
                 print_fn=log.print,
-                batch_gen_kw=conf.train["batch_gen_kw"]
+                batch_gen_kw=conf["batch_gen_kw"]
             )
         except KeyboardInterrupt:
             print("Keyboard Interrupt event.")
         finally:
             #closing tensorboard writers
-            if conf.train["use_tensorboard"]:
+            if conf["use_tensorboard"]:
                 train_writer.close()
                 val_writer.close()
 
@@ -182,5 +218,8 @@ def main():
 
     print("\ndone.", flush=True)
 
+def main():
+    train()
+
 if __name__ == '__main__':
-    main()
+    train()

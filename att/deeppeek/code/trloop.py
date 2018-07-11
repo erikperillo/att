@@ -1,7 +1,7 @@
 """
 The MIT License (MIT)
 
-Copyright (c) 2017 Erik Perillo <erik.perillo@gmail.com>
+Copyright (c) 2017, 2018 Erik Perillo <erik.perillo@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -35,9 +35,7 @@ import time
 import math
 import queue
 from collections import defaultdict
-
-#true when it's time to kill fetch threads
-_stop_fetch_threads = False
+from functools import partial
 
 def _no_op(*args, **kwargs):
     pass
@@ -45,10 +43,7 @@ def _no_op(*args, **kwargs):
 def _dummy_load(fp):
     return random.randint(0, 10), random.randint(0, 10)
 
-def _dummy_augment(xy):
-    return [xy]
-
-def _dummy_pre_proc(xy):
+def _identity(xy, *args, **kwargs):
     return xy
 
 def _inf_gen():
@@ -56,13 +51,6 @@ def _inf_gen():
     while True:
         yield n
         n += 1
-
-def _pop_rand_elem(lst):
-    if not lst:
-        return None
-    index = random.randint(0, len(lst)-1)
-    lst[-1], lst[index] = lst[index], lst[-1]
-    return lst.pop()
 
 def _str_fmt_time(seconds):
     int_seconds = int(seconds)
@@ -78,120 +66,51 @@ def _str_fmt_dct(dct):
     """Assumes dict mapping str to float."""
     return " | ".join("{}: {:.4g}".format(k, v) for k, v in dct.items())
 
-def fetch(fps, q, load_chunk_size, max_n_samples,
-    load_fn, augment_fn, pre_proc_fn):
+def fetch(path_and_rand_seed, load_fn, augment_fn, pre_proc_fn):
     """
     Thread to load, pre-process and augment data, putting it into queue q.
     """
-    #list to store samples
-    samples = []
-
-    end = False
-    while not end:
-        if len(samples) < max_n_samples:
-            #loading load_chunk_size files before putting into queue.
-            #this is to better spread augmented samples
-            for __ in range(load_chunk_size):
-                if not fps:
-                    end = True
-                    break
-
-                #getting filepath
-                fp = fps.pop()
-                #loading x and y
-                xy = load_fn(fp)
-                #augmentation
-                augm_xy = augment_fn(xy)
-                #pre-processing
-                augm_xy = pre_proc_fn(augm_xy)
-                #putting to samples list
-                samples.extend(augm_xy)
-
-        #putting random sample into queue
-        if samples:
-            q.put(_pop_rand_elem(samples))
-
-    #putting remaining samples to queue
-    while samples:
-        q.put(_pop_rand_elem(samples))
+    path, rand_seed = path_and_rand_seed
+    #loading x and y
+    xy = load_fn(path)
+    #augmentation
+    xy = augment_fn(xy, rand_seed=rand_seed)
+    #pre-processing
+    xy = pre_proc_fn(xy)
+    return path, xy
 
 def batch_gen(
-        filepaths,
+        paths,
         batch_size=1,
         n_threads=1,
         max_n_samples=None,
-        fetch_thr_load_chunk_size=1,
         fetch_thr_load_fn=_dummy_load,
-        fetch_thr_augment_fn=_dummy_augment,
-        fetch_thr_pre_proc_fn=_dummy_pre_proc,
-        max_augm_factor=1,
-        shuffle_fps=True):
-
+        fetch_thr_augment_fn=_identity,
+        fetch_thr_pre_proc_fn=_identity,
+        shuffle_paths=True,
+        base_seed=1):
     """
     Main thread for generation of batches.
     Spans other threads for data loading and processing, gathering the
         samples into batches and yielding them.
     """
     if max_n_samples is None:
-        max_n_samples = len(filepaths)*max_augm_factor
+        max_n_samples = len(paths)
 
     #shuffling filepaths
-    if shuffle_fps:
-        random.shuffle(filepaths)
+    if shuffle_paths:
+        random.shuffle(paths)
 
-    #threads and thread queues
-    threads = []
-    qs = []
-    #maximum number of samples per thread
-    max_n_samples_per_thr = math.ceil(
-        max_n_samples/(n_threads*fetch_thr_load_chunk_size*max_augm_factor))
-    #number of filepaths per thread
-    n_fps_per_thr = math.ceil(len(filepaths)/n_threads)
-
-    #initializing thread objects
-    for i in range(n_threads):
-        #getting a slice of filepaths for thread
-        thr_fps = filepaths[i*n_fps_per_thr:(i+1)*n_fps_per_thr]
-        #queue in which fetch thread will put its samples
-        thr_q = mp.Queue(maxsize=1)
-        #process object
-        thr = mp.Process(
-            target=fetch,
-            args=(thr_fps, thr_q,
-                fetch_thr_load_chunk_size, max_n_samples_per_thr,
-                fetch_thr_load_fn, fetch_thr_augment_fn, fetch_thr_pre_proc_fn))
-
-        threads.append(thr)
-        qs.append(thr_q)
-
-    #starting threads
-    for thr in threads:
-        thr.daemon = True
-        thr.start()
-
-    #true iff all threads are finished
-    all_done = False
-    #indexes for threads
-    thr_ids = list(range(n_threads))
-    #batch to be yielded
     batch = []
-
-    while not all_done and not _stop_fetch_threads:
-        all_done = True
-        #shuffling indexes to fetch from threads in random order
-        random.shuffle(thr_ids)
-
-        for i in thr_ids:
-            if threads[i].is_alive():
-                all_done = False
-
-            #trying to get sample from thread
-            try:
-                xy = qs[i].get(block=False)
-            except queue.Empty:
-                continue
-
-            #if reached batch size, yields batch
+    #multithread pool
+    pool = mp.Pool(n_threads)
+    #fetch function
+    fetch_fn = partial(fetch, load_fn=fetch_thr_load_fn,
+        augment_fn=fetch_thr_augment_fn, pre_proc_fn=fetch_thr_pre_proc_fn)
+    #main loop
+    while paths:
+        args = [(p, base_seed+i) for i, p in enumerate(paths[:max_n_samples])]
+        for p, xy in pool.imap(fetch_fn, args, chunksize=batch_size):
             batch.append(xy)
             if len(batch) == batch_size:
                 batch_x = np.stack([b[0] for b in batch], axis=0)
@@ -199,9 +118,8 @@ def batch_gen(
                 yield batch_x, batch_y
                 batch = []
 
-    #joining processes
-    for thr in threads:
-        thr.terminate()
+        paths = paths[max_n_samples:]
+        base_seed += max_n_samples
 
 def _val_set_loop(val_set, val_fn, val_batch_gen_kw, print_fn=_no_op):
     """
@@ -265,14 +183,12 @@ def train_loop(
     val_set=None, val_fn=None, val_every_its=None, patience=None,
     log_every_its=None, log_fn=_no_op,
     save_model_fn=_no_op, save_every_its=None,
+    batch_gen_kw={},
     verbose=2, print_fn=print,
-    batch_gen_kw={}):
+    print_batch_metrics=False):
     """
     General Training loop.
     """
-    #it is set to True to stop fetch threads
-    global _stop_fetch_threads
-
     #info/warning functions
     info = print_fn if verbose >= 2 else _no_op
     warn = print_fn if verbose >= 1 else _no_op
@@ -282,8 +198,7 @@ def train_loop(
     validation = val_set is not None and val_fn is not None
     #setting up validation batches_gen_kwargs
     val_batch_gen_kw = dict(batch_gen_kw)
-    val_batch_gen_kw["max_augm_factor"] = 1
-    val_batch_gen_kw["fetch_thr_augment_fn"] = _dummy_augment
+    val_batch_gen_kw["fetch_thr_augment_fn"] = _identity
 
     #batch generator for validation set
     if log_every_its is not None:
@@ -305,7 +220,6 @@ def train_loop(
         #checking stopping
         if n_epochs is not None and epoch >= n_epochs:
             warn("\nWARNING: maximum number of epochs reached")
-            _stop_fetch_threads = True
             return
 
         info("{}/{} epochs (time so far: {})".format(
@@ -315,7 +229,6 @@ def train_loop(
         loss_sum = 0
         #estimating number of batches for train phase
         n_batches = len(train_set)//batch_gen_kw["batch_size"]
-        n_batches *= batch_gen_kw["max_augm_factor"]
 
         #main train loop
         for i, (bx, by) in enumerate(batch_gen(train_set, **batch_gen_kw)):
@@ -335,18 +248,21 @@ def train_loop(
                     val_gen = batch_gen(val_set, **val_batch_gen_kw)
                     val_bx, val_by = next(val_gen)
 
-                #uncomment this to print statistics on console
-                #metrics = val_fn(bx, by)
-                #print_("[batch {}] metrics (train): {}".format(
-                #    i+1, _str_fmt_dct(metrics)), 16*" ")
-                #metrics = val_fn(val_bx, val_by)
-                #print_("[batch {}] metrics (val): {}".format(
-                #    i+1, _str_fmt_dct(metrics)), 16*" ")
+                #print batch metrics
+                if print_batch_metrics:
+                    metrics = val_fn(bx, by)
+                    print_("[batch {}] metrics (train): {}".format(
+                        i+1, _str_fmt_dct(metrics)), 16*" ")
+                    metrics = val_fn(val_bx, val_by)
+                    print_("[batch {}] metrics (val): {}".format(
+                        i+1, _str_fmt_dct(metrics)), 16*" ")
+
                 log_fn(bx, by, its, train=True)
                 log_fn(val_bx, val_by, its, train=False)
 
             #validation every #step if required
-            if val_every_its is not None and its%val_every_its == 0:
+            if val_every_its is not None and its%val_every_its == 0 \
+                and validation:
                 info("\n----------\nvalidation on it #{}".format(its), 16*" ")
                 #old best validation loss
                 best_val_loss_ = best_val_loss
@@ -361,7 +277,6 @@ def train_loop(
 
                 if early_stopping:
                     info("WARNING: early stopping condition met")
-                    _stop_fetch_threads = True
                     return
 
             #saving model every #step if required
@@ -378,7 +293,7 @@ def train_loop(
         info("    processed {} batches".format(i+1), 16*" ")
         info("    mean loss: {}".format(loss_mean), flush=True)
 
-        if not validation:
+        if not validation or val_every_its is not None:
             info("----------")
             continue
 
@@ -393,7 +308,6 @@ def train_loop(
 
         if early_stopping and val_every_its is None:
             info("WARNING: early stopping condition met")
-            _stop_fetch_threads = True
             return
 
         if best_val_loss_ is None or best_val_loss < best_val_loss_:
