@@ -114,7 +114,7 @@ def _pre_proc_x(x, shape=None):
             x, shape, preserve_range=True, mode="constant", order=1)
     #normalizing each channel per mean and std
     for i in range(x.shape[0]):
-        x[i] = _std_norm(x[i])
+        x[i] = _std_norm(x[i].astype("float32"))
     x = _hwc_to_chw(x)
     x = x.astype("float32")
     return x
@@ -127,7 +127,7 @@ def _pre_proc_y(y, shape=None):
         y = transf.resize(
             y, shape, preserve_range=True, mode="constant", order=1)
     y = y.reshape((1, ) + y.shape)
-    y = _unit_norm(y)
+    y = _unit_norm(y.astype("float32"))
     y = y.astype("float32")
     return y
 
