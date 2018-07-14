@@ -114,7 +114,7 @@ def train():
     #training session
     with tf.Session(graph=graph) as sess:
         #setting tensorflow random seed
-        tf.set_random_seed(0)
+        tf.set_random_seed(conf["rand_seed"] + 2)
 
         #if first time training, creates graph collections for model params
         #else, loads model weights and params from collections
@@ -201,7 +201,8 @@ def train():
                 save_every_its=conf["save_every_its"],
                 verbose=conf["verbose"],
                 print_fn=log.print,
-                batch_gen_kw=conf["batch_gen_kw"]
+                batch_gen_kw=conf["batch_gen_kw"],
+                log_batch_gen_kw=conf["log_batch_gen_kw"],
             )
         except KeyboardInterrupt:
             print("Keyboard Interrupt event.")

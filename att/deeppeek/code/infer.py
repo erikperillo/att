@@ -68,7 +68,7 @@ def rot_averaged_predict(x, pred_fn, rotations=[0]):
     """
     Runs pred_fn for each rotation of x and calculates the average y.
     """
-    y_pred = np.zeros(shape=(1, ) + x.shape[-2:], dtype="float32")
+    y_pred = np.zeros(shape=(1, ) + model.Y_SHAPE[-2:], dtype="float32")
     for rot in rotations:
         _x = rot90(x, rot)
         _y = pred_fn(_x)
@@ -91,29 +91,8 @@ def strided_predict(x, pred_fn, shape, stride):
     Runs pred_fn for each cut specified shape, striding stride.
     For positions where prediction was done more than once, calculates average.
     """
-    if isinstance(shape, int):
-        shape = (shape, shape)
-    h_shape, w_shape = shape
-    if isinstance(stride, int):
-        stride = (stride, stride)
-    h_stride, w_stride = stride
-    height, width = x.shape[-2:]
-
-    y_pred = np.zeros(shape=x.shape[-2:], dtype="float32")
-    mult = np.zeros(shape=x.shape[-2:], dtype="int")
-
-    x_points = get_cut_points(width, w_shape, w_stride)
-    y_points = get_cut_points(height, h_shape, h_stride)
-    for i, j in it.product(y_points, x_points):
-        _x = x[..., i:i+h_shape, j:j+w_shape].copy()
-        _y_pred = pred_fn(_x)
-        y_pred[i:i+h_shape, j:j+w_shape] += _y_pred[..., :, :]
-        mult[i:i+h_shape, j:j+w_shape] += 1
-
-    assert (mult == 0).sum() == 0
-    y_pred = y_pred/mult.astype("float32")
+    y_pred = pred_fn(x).astype("float32")
     y_pred = y_pred.reshape((1, ) + y_pred.shape)
-
     return y_pred
 
 def predict(x, model_pred_fn):

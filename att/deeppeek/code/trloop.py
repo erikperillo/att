@@ -77,7 +77,7 @@ def fetch(path_and_rand_seed, load_fn, augment_fn, pre_proc_fn):
     xy = augment_fn(xy, rand_seed=rand_seed)
     #pre-processing
     xy = pre_proc_fn(xy)
-    return path, xy
+    return xy
 
 def batch_gen(
         paths,
@@ -110,7 +110,7 @@ def batch_gen(
     #main loop
     while paths:
         args = [(p, base_seed+i) for i, p in enumerate(paths[:max_n_samples])]
-        for p, xy in pool.imap(fetch_fn, args, chunksize=batch_size):
+        for xy in pool.imap(fetch_fn, args, chunksize=batch_size):
             batch.append(xy)
             if len(batch) == batch_size:
                 batch_x = np.stack([b[0] for b in batch], axis=0)
@@ -120,6 +120,10 @@ def batch_gen(
 
         paths = paths[max_n_samples:]
         base_seed += max_n_samples
+
+    pool.close()
+    pool.terminate()
+    pool.join()
 
 def _val_set_loop(val_set, val_fn, val_batch_gen_kw, print_fn=_no_op):
     """
@@ -184,6 +188,7 @@ def train_loop(
     log_every_its=None, log_fn=_no_op,
     save_model_fn=_no_op, save_every_its=None,
     batch_gen_kw={},
+    log_batch_gen_kw={},
     verbose=2, print_fn=print,
     print_batch_metrics=False):
     """
@@ -202,7 +207,9 @@ def train_loop(
 
     #batch generator for validation set
     if log_every_its is not None:
-        val_gen = batch_gen(val_set, **val_batch_gen_kw)
+        log_batch_gen_kw_ = dict(val_batch_gen_kw)
+        log_batch_gen_kw_.update(log_batch_gen_kw)
+        val_gen = batch_gen(val_set, **log_batch_gen_kw_)
 
     #total train iterations
     its = 0
@@ -245,7 +252,7 @@ def train_loop(
                 try:
                     val_bx, val_by = next(val_gen)
                 except StopIteration:
-                    val_gen = batch_gen(val_set, **val_batch_gen_kw)
+                    val_gen = batch_gen(val_set, **log_batch_gen_kw_)
                     val_bx, val_by = next(val_gen)
 
                 #print batch metrics

@@ -17,9 +17,9 @@ random.seed(10)
 conf = {
     "paths": glob.glob("/home/erik/data/sal-dsets/salicon/stimuli/*.jpg"),
     "splits": {
-        "train": 0.9,
+        "train": 0.8,
         "val": 0.1,
-        "test": 0,
+        "test": 0.1,
     },
     "dst_paths": {
         "train": "../data/salicon_train-set.csv",

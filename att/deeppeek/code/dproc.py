@@ -140,8 +140,27 @@ def _pre_proc_xy(xy, x_shape=None, y_shape=None):
 def train_pre_proc(xy, x_shape=None, y_shape=None):
     return _pre_proc_xy(xy, x_shape, y_shape)
 
-def infer_pre_proc(x):
-    return _pre_proc_x(x)
+def infer_load_x_judd(path):
+    x = _load(path)
+    if x.ndim < 3:
+        x = np.dstack([x, x, x])
+    x = _hwc_to_chw(x)
+    return x
+
+def infer_load_y_judd(x_path):
+    x_path = os.path.abspath(x_path)
+    filename = os.path.basename(x_path).replace(".jpeg", "_fixMap.jpg")
+    dir_path = os.path.dirname(os.path.dirname(x_path))
+    path = os.path.join(dir_path, "maps", filename)
+    y = _load(path)
+    return y
+
+def infer_pre_proc(x, x_shape):
+    return _pre_proc_x(x, x_shape)
+
+def infer_load_judd(x_path):
+    x = infer_load_x_judd(x_path)
+    return x
 
 def infer_save_y_pred(path, y_pred):
     """
@@ -151,4 +170,4 @@ def infer_save_y_pred(path, y_pred):
     y_pred = y_pred.reshape(y_pred.shape[-2:])
     y_pred = y_pred.clip(0, 1)
     y_pred = (255*y_pred).astype("uint8")
-    io.imsave(path, y_pred)
+    io.imsave(path, y_pred, quality=100)

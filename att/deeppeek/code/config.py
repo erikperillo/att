@@ -109,12 +109,12 @@ _train_set_stats = _read_stats_file(_stats_path)
 #data augmentation operations
 _augment_ops = [
     ("hmirr", {}, 0.5),
-    ("rotation", {"angle": (-25, 25)}, 0.1),
-    ("add_noise", {"max_noise_amplitude": 0.2}, 0.1),
-    ("mul_noise", {"noise": (0.9, 1.1)}, 0.1),
-    ("blur", {"sigma": (0.5, 1.5)}, 0.1),
-    ("translation", {"transl": (-0.2, 0.2)}, 0.1),
-    ("shear", {"angle": (-0.2, 0.2)}, 0.1),
+    ("rotation", {"angle": (-40, 40)}, 0.15),
+    ("add_noise", {"max_noise_amplitude": 0.25}, 0.15),
+    ("mul_noise", {"noise": (0.7, 1.3)}, 0.15),
+    ("blur", {"sigma": (1.0, 2.0)}, 0.15),
+    ("translation", {"transl": (-0.3, 0.3)}, 0.15),
+    ("shear", {"angle": (-0.3, 0.3)}, 0.15),
 ]
 
 
@@ -182,11 +182,11 @@ train = {
         "batch_size": 8,
 
         #number of fetching threads for data loading/pre-processing/augmentation
-        "n_threads": 8,
+        "n_threads": 14,
 
         #maximum number of samples to be loaded at a time.
         #the actual number may be slightly larger due to rounding.
-        "max_n_samples": 1024,
+        "max_n_samples": 2048,
 
         #function to return tuple (x, y_true) given filepath
         "fetch_thr_load_fn": \
@@ -207,6 +207,11 @@ train = {
             partial(dproc.train_pre_proc,
                 x_shape=_x_shape[-2:], y_shape=_y_shape[-2:]),
             #lambda xy: dproc.train_pre_proc(xy, _x_shape[-2:], _y_shape[-2:]),
+    },
+
+    "log_batch_gen_kw": {
+        "n_threads": 2,
+        "max_n_samples": 512,
     },
 
     #random seed for reproducibility
@@ -243,7 +248,7 @@ infer = {
 
     #rotations to use in averaged_predict method.
     #0 is the original image, 1 is image rotated 90 degrees (cc) 1 time etc
-    "rot_averaged_predict_rotations": [0, 1, 2, 3],
+    "rot_averaged_predict_rotations": [0],
 
     #wether or not compute prediction for reflected image as well and
     #average the results
@@ -257,10 +262,10 @@ infer = {
     },
 
     #function to load input file
-    "load_fn": dproc.infer_load,
+    "load_fn": dproc.infer_load_judd,
 
     #function to load input x (before going into model)
-    "pre_proc_fn": dproc.infer_pre_proc,
+    "pre_proc_fn": partial(dproc.infer_pre_proc, x_shape=_x_shape[-2:]),
 
     #function to save prediction given path and y_pred
     "save_y_pred_fn": dproc.infer_save_y_pred,
