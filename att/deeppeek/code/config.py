@@ -205,7 +205,8 @@ train = {
         # fetch_thr_pre_proc_fn refers to the first step.
         "fetch_thr_pre_proc_fn": \
             partial(dproc.train_pre_proc,
-                x_shape=_x_shape[-2:], y_shape=_y_shape[-2:]),
+                x_shape=_x_shape[-2:], channel_norm=True, to_lab=True,
+                y_shape=_y_shape[-2:]),
             #lambda xy: dproc.train_pre_proc(xy, _x_shape[-2:], _y_shape[-2:]),
     },
 

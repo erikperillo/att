@@ -20,10 +20,13 @@ _paths = [
     "/home/erik/data/sal-dsets/salicon/stimuli/{}.jpg".format(p) for p in _paths
 ]
 
+_to_lab = False
 conf = {
     "paths": _paths,
     "n_threads": 16,
-    "dst_path": "../data/salicon_train-set_lab-stats.json",
+    "dst_path": "../data/salicon_train-set_{}-stats.json".format(
+        "lab" if _to_lab else "rgb"),
+    "to_lab": _to_lab,
 }
 
 def sumsq(lst):
@@ -47,7 +50,8 @@ def get_std(n, stds, means):
 def pre_proc(x):
     if x.ndim < 3:
         x = np.dstack([x, x, x])
-    x = color.rgb2lab(x)
+    if conf["to_lab"]:
+        x = color.rgb2lab(x)
     x = np.moveaxis(x, 2, 0)
     return x
 

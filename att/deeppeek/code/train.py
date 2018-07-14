@@ -31,8 +31,8 @@ from config import train as conf
 random.seed(conf["rand_seed"])
 np.random.seed(conf["rand_seed"] + 1)
 
-import subprocess as sp
 import tensorflow as tf
+import subprocess as sp
 import os
 import sys
 import shutil
@@ -95,7 +95,10 @@ def train():
     print("done.")
 
     #meta-model
-    meta_model = model.MetaModel(**conf["meta_model_kwargs"])
+    meta_model_kwargs = dict(conf["meta_model_kwargs"])
+    if "rand_seed" not in meta_model_kwargs:
+        meta_model_kwargs["rand_seed"] = conf["rand_seed"] + 2
+    meta_model = model.MetaModel(**meta_model_kwargs)
 
     #creating logging object
     log = util.Tee([sys.stdout,
@@ -113,13 +116,9 @@ def train():
 
     #training session
     with tf.Session(graph=graph) as sess:
-        #setting tensorflow random seed
-        tf.set_random_seed(conf["rand_seed"] + 2)
-
         #if first time training, creates graph collections for model params
         #else, loads model weights and params from collections
         if pre_trained_model_path is None:
-            #sess.run(tf.global_variables_initializer())
             sess.run(
                 tf.group(
                     tf.global_variables_initializer(),

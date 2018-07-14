@@ -286,7 +286,7 @@ class MetaModel:
     def get_coll_key_for_param(param_name):
         return "/".join([MetaModel.NAME, "params", param_name])
 
-    def __init__(self, stats=None):
+    def __init__(self, stats=None, rand_seed=None):
         """
         Initialization of metamodel.
         Every value except for metrics is a tensorflow op/tensor of the graph:
@@ -301,6 +301,7 @@ class MetaModel:
         """
         self.params = {}
         self.stats = stats
+        self.rand_seed = rand_seed
 
     def build_graph(self, pre_graph=tf.Graph()):
         """
@@ -308,6 +309,8 @@ class MetaModel:
         """
         graph = tf.get_default_graph() if pre_graph is None else pre_graph
         with graph.as_default():
+            if self.rand_seed is not None:
+                tf.set_random_seed(self.rand_seed)
             self.params = _build_graph(stats=self.stats)
         assert set(self.params.keys()) == MetaModel.PARAMS_KEYS
         return graph

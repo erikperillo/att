@@ -101,20 +101,22 @@ def assay_load_y_pred(path):
 def assay_load_y_true(path):
     pass
 
-def _pre_proc_x(x, shape=None):
+def _pre_proc_x(x, shape=None, to_lab=True, channel_norm=True):
     """
     assumes x in format height, width, channels
     """
     x = _chw_to_hwc(x)
     #converting to LAB colorspace
-    x = color.rgb2lab(x, illuminant="D65", observer="2")
+    if to_lab:
+        x = color.rgb2lab(x, illuminant="D65", observer="2")
     #resizing input
     if shape is not None:
         x = transf.resize(
             x, shape, preserve_range=True, mode="constant", order=1)
     #normalizing each channel per mean and std
-    for i in range(x.shape[0]):
-        x[i] = _std_norm(x[i].astype("float32"))
+    if channel_norm:
+        for i in range(x.shape[0]):
+            x[i] = _std_norm(x[i].astype("float32"))
     x = _hwc_to_chw(x)
     x = x.astype("float32")
     return x
@@ -131,14 +133,15 @@ def _pre_proc_y(y, shape=None):
     y = y.astype("float32")
     return y
 
-def _pre_proc_xy(xy, x_shape=None, y_shape=None):
+def _pre_proc_xy(
+        xy, x_shape=None, y_shape=None, to_lab=True, channel_norm=True):
     x, y = xy
     x = _pre_proc_x(x, x_shape)
     y = _pre_proc_y(y, y_shape)
     return x, y
 
-def train_pre_proc(xy, x_shape=None, y_shape=None):
-    return _pre_proc_xy(xy, x_shape, y_shape)
+def train_pre_proc(xy, **kwargs):
+    return _pre_proc_xy(xy, **kwargs)
 
 def infer_load_x_judd(path):
     x = _load(path)
