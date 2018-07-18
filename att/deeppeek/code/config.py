@@ -77,34 +77,55 @@ _assay_output_dir_path = os.path.join(_last_touched_sess_dir_path, "assays")
 _datagen_output_dir_path = "/mnt/db/rand/croplandnet"
 #path to dir that contains train/val/test set lists and train stats
 dataset_dir_path = os.path.join(_datagen_output_dir_path, "refine_20m")
-#path to train set statistics json file
-#_train_set_stats_path = os.path.join(dataset_dir_path, "train_stats.json")
 
 #directory containing this file
 _config_file_dir = os.path.dirname(os.path.abspath(__file__))
 #directory containing data
 _data_dir = os.path.join(os.path.dirname(_config_file_dir), "data")
 
-#path to dataset
-dataset_path = "/home/erik/data/sal-dsets/salicon"
+#name of dataset
+_dset = "judd"
 
-#path to statistics of train set
-_stats_path = os.path.join(_data_dir, "salicon_train-set_lab-stats.json")
+#path to dataset
+dataset_path = "/home/erik/data/sal-dsets/{}".format(_dset)
 
 #path to list of train uids
-_train_uids_list_path = os.path.join(_data_dir, "salicon_train-set.csv")
+_train_uids_list_path = os.path.join(
+    _data_dir, "{}_train-set.csv".format(_dset))
 #path to list of val uids
-_val_uids_list_path = os.path.join(_data_dir, "salicon_val-set.csv")
+_val_uids_list_path = os.path.join(
+    _data_dir, "{}_val-set.csv".format(_dset))
 #path to list of test uids
-_test_uids_list_path = os.path.join(_data_dir, "salicon_test-set.csv")
+_test_uids_list_path = os.path.join(
+    _data_dir, "{}_test-set.csv".format(_dset))
 
 ### DATA PROCESSING CONFIGURATION ###
 #shape of input/output
 _x_shape = model.X_SHAPE[-3:]
 _y_shape = model.Y_SHAPE[-3:]
+#use lab colorspace
+_use_lab = True
+#channel-wise normalization
+_per_channel_norm = not True
 
+#load fns
+_train_load = dproc.train_load_judd if _dset == "judd"\
+    else (dproc.train_load_salicon if _dset == "salicon"\
+        else dproc.train_load_cat2000)
+_infer_load = dproc.infer_load_judd if _dset == "judd"\
+    else (dproc.infer_load_salicon if _dset == "salicon"\
+        else dproc.infer_load_cat2000)
+
+#path to statistics of train set
+_stats_path = os.path.join(_data_dir,
+    "{}_train-set_{}-stats.json".format(_dset, "lab" if _use_lab else "rgb"))
 # these stats are fed to model; they are used for pre-processing before unet
 _train_set_stats = _read_stats_file(_stats_path)
+
+#keyword arguments for meta-model
+#stats is train-set statistics
+# (in form of a dict {band_index: {'mean': mean, 'std': std}}
+_meta_model_kwargs = {} if _per_channel_norm else {"stats": _train_set_stats}
 
 #data augmentation operations
 _augment_ops = [
@@ -128,7 +149,8 @@ train = {
     #can be None
     #NOTE that this argument can be overriden by the command line
     "pre_trained_model_path": \
-        None,
+        os.path.join("/home/erik/data/ml/sessions/deeppeek_salicon",
+            "trains/model-1/self/ckpts/best"),
 
     #list (or path to list file) with paths of train set
     #NOTE that this argument can be overriden by the command line
@@ -147,11 +169,7 @@ train = {
     },
 
     #model construction args
-    "meta_model_kwargs": {
-        #train-set statistics
-        # (in form of a dict {band_index: {'mean': mean, 'std': std}}
-        #"stats": _train_set_stats,
-    },
+    "meta_model_kwargs": _meta_model_kwargs,
 
     #learning rate of the model
     "learning_rate": 1e-4,
@@ -186,11 +204,11 @@ train = {
 
         #maximum number of samples to be loaded at a time.
         #the actual number may be slightly larger due to rounding.
-        "max_n_samples": 2048,
+        "max_n_samples": 2240,
 
         #function to return tuple (x, y_true) given filepath
         "fetch_thr_load_fn": \
-            partial(dproc.train_load, dset_path=dataset_path),
+            partial(_train_load, dset_path=dataset_path),
             #lambda uid: dproc.train_load(uid, dataset_path),
 
         #function to return (possibly) augmented image
@@ -205,15 +223,21 @@ train = {
         # fetch_thr_pre_proc_fn refers to the first step.
         "fetch_thr_pre_proc_fn": \
             partial(dproc.train_pre_proc,
-                x_shape=_x_shape[-2:], channel_norm=True, to_lab=True,
+                x_shape=_x_shape[-2:],
+                channel_norm=_per_channel_norm,
+                to_lab=_use_lab,
                 y_shape=_y_shape[-2:]),
             #lambda xy: dproc.train_pre_proc(xy, _x_shape[-2:], _y_shape[-2:]),
     },
 
+    #keyword args for log batch generator
     "log_batch_gen_kw": {
         "n_threads": 2,
         "max_n_samples": 512,
     },
+
+    #tolerance to determine better loss
+    "better_loss_tol": 1e-3,
 
     #random seed for reproducibility
     "rand_seed": 135582,
@@ -263,10 +287,13 @@ infer = {
     },
 
     #function to load input file
-    "load_fn": dproc.infer_load_judd,
+    "load_fn": _infer_load,
 
     #function to load input x (before going into model)
-    "pre_proc_fn": partial(dproc.infer_pre_proc, x_shape=_x_shape[-2:]),
+    "pre_proc_fn": partial(dproc.infer_pre_proc,
+        shape=_x_shape[-2:],
+        channel_norm=_per_channel_norm,
+        to_lab=_use_lab),
 
     #function to save prediction given path and y_pred
     "save_y_pred_fn": dproc.infer_save_y_pred,

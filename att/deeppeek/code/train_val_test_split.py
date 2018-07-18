@@ -15,21 +15,21 @@ import random
 random.seed(10)
 
 conf = {
-    "paths": glob.glob("/home/erik/data/sal-dsets/salicon/stimuli/*.jpg"),
+    "paths": glob.glob("/home/erik/data/sal-dsets/cat2000/stimuli/*"),
     "splits": {
         "train": 0.8,
-        "val": 0.1,
-        "test": 0.1,
+        "val": 0.2,
+        #"test": 0.0,
     },
     "dst_paths": {
-        "train": "../data/salicon_train-set.csv",
-        "val": "../data/salicon_val-set.csv",
-        "test": "../data/salicon_test-set.csv",
+        "train": "../data/cat2000_train-set.csv",
+        "val": "../data/cat2000_val-set.csv",
+        "test": "../data/cat2000_test-set.csv",
     },
 }
 
 def get_uids(paths):
-    uids = [int(os.path.basename(p).split(".")[0]) for p in paths]
+    uids = [os.path.basename(p).split(".")[0] for p in paths]
     return uids
 
 def sample(iterable, n):

@@ -15,16 +15,16 @@ from skimage import color
 Given dataset paths, computes statistics over them.
 """
 
-_paths = [l.strip() for l in open("../data/salicon_train-set.csv")]
+_paths = [l.strip() for l in open("../data/cat2000_train-set.csv")]
 _paths = [
-    "/home/erik/data/sal-dsets/salicon/stimuli/{}.jpg".format(p) for p in _paths
+    "/home/erik/data/sal-dsets/cat2000/stimuli/{}.jpg".format(p) for p in _paths
 ]
 
-_to_lab = False
+_to_lab = not True
 conf = {
     "paths": _paths,
     "n_threads": 16,
-    "dst_path": "../data/salicon_train-set_{}-stats.json".format(
+    "dst_path": "../data/cat2000_train-set_{}-stats.json".format(
         "lab" if _to_lab else "rgb"),
     "to_lab": _to_lab,
 }

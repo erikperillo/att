@@ -63,34 +63,92 @@ def _gray_to_rgb(img):
 def _load(path):
     return io.imread(path)
 
-def _get_x_path(uid, dset_path):
+def _get_x_path_salicon(uid, dset_path):
     path = os.path.join(dset_path, "stimuli", "{}.jpg".format(uid))
     return path
 
-def _get_y_path(uid, dset_path):
-    path = os.path.join(dset_path, "maps", "{}.png".format(uid))
+def _get_x_path_judd(uid, dset_path):
+    path = os.path.join(dset_path, "stimuli", "{}.jpeg".format(uid))
     return path
 
-def _load_x(uid, dset_path):
-    path = _get_x_path(uid, dset_path)
+def _get_x_path_cat2000(uid, dset_path):
+    path = os.path.join(dset_path, "stimuli", "{}.jpg".format(uid))
+    return path
+
+def _get_y_path_salicon(uid, dset_path):
+    path = os.path.join(dset_path, "maps", "{}.jpg".format(uid))
+    return path
+
+def _get_y_path_judd(uid, dset_path):
+    path = os.path.join(dset_path, "maps", "{}_fixMap.jpg".format(uid))
+    return path
+
+def _get_y_path_cat2000(uid, dset_path):
+    path = os.path.join(dset_path, "maps", "{}.jpg".format(uid))
+    return path
+
+def _load_x_salicon(uid, dset_path):
+    path = _get_x_path_salicon(uid, dset_path)
     x = _load(path)
     if x.ndim < 3:
         x = np.dstack([x, x, x])
     x = _hwc_to_chw(x)
     return x
 
-def _load_y(uid, dset_path):
-    path = _get_y_path(uid, dset_path)
+def _load_x_judd(uid, dset_path):
+    path = _get_x_path_judd(uid, dset_path)
+    x = _load(path)
+    if x.ndim < 3:
+        x = np.dstack([x, x, x])
+    x = _hwc_to_chw(x)
+    return x
+
+def _load_x_cat2000(uid, dset_path):
+    path = _get_x_path_cat2000(uid, dset_path)
+    x = _load(path)
+    if x.ndim < 3:
+        x = np.dstack([x, x, x])
+    x = _hwc_to_chw(x)
+    return x
+
+def _load_y_salicon(uid, dset_path):
+    path = _get_y_path_salicon(uid, dset_path)
     y = _load(path)
     return y
 
-def _load_xy(uid, dset_path):
-    x = _load_x(uid, dset_path)
-    y = _load_y(uid, dset_path)
+def _load_y_judd(uid, dset_path):
+    path = _get_y_path_judd(uid, dset_path)
+    y = _load(path)
+    return y
+
+def _load_y_cat2000(uid, dset_path):
+    path = _get_y_path_cat2000(uid, dset_path)
+    y = _load(path)
+    return y
+
+def _load_xy_salicon(uid, dset_path):
+    x = _load_x_salicon(uid, dset_path)
+    y = _load_y_salicon(uid, dset_path)
     return x, y
 
-def train_load(uid, dset_path):
-    return _load_xy(uid, dset_path)
+def _load_xy_judd(uid, dset_path):
+    x = _load_x_judd(uid, dset_path)
+    y = _load_y_judd(uid, dset_path)
+    return x, y
+
+def _load_xy_cat2000(uid, dset_path):
+    x = _load_x_cat2000(uid, dset_path)
+    y = _load_y_cat2000(uid, dset_path)
+    return x, y
+
+def train_load_salicon(uid, dset_path):
+    return _load_xy_salicon(uid, dset_path)
+
+def train_load_judd(uid, dset_path):
+    return _load_xy_judd(uid, dset_path)
+
+def train_load_cat2000(uid, dset_path):
+    return _load_xy_cat2000(uid, dset_path)
 
 def infer_load(path):
     return _load(path)
@@ -136,34 +194,28 @@ def _pre_proc_y(y, shape=None):
 def _pre_proc_xy(
         xy, x_shape=None, y_shape=None, to_lab=True, channel_norm=True):
     x, y = xy
-    x = _pre_proc_x(x, x_shape)
+    x = _pre_proc_x(x, x_shape, to_lab, channel_norm)
     y = _pre_proc_y(y, y_shape)
     return x, y
 
 def train_pre_proc(xy, **kwargs):
     return _pre_proc_xy(xy, **kwargs)
 
-def infer_load_x_judd(path):
+def infer_load_judd(path):
     x = _load(path)
     if x.ndim < 3:
         x = np.dstack([x, x, x])
     x = _hwc_to_chw(x)
     return x
 
-def infer_load_y_judd(x_path):
-    x_path = os.path.abspath(x_path)
-    filename = os.path.basename(x_path).replace(".jpeg", "_fixMap.jpg")
-    dir_path = os.path.dirname(os.path.dirname(x_path))
-    path = os.path.join(dir_path, "maps", filename)
-    y = _load(path)
-    return y
+def infer_load_salicon(path):
+    return infer_load_judd(path)
 
-def infer_pre_proc(x, x_shape):
-    return _pre_proc_x(x, x_shape)
+def infer_load_cat2000(path):
+    return infer_load_judd(path)
 
-def infer_load_judd(x_path):
-    x = infer_load_x_judd(x_path)
-    return x
+def infer_pre_proc(x, **kwargs):
+    return _pre_proc_x(x, **kwargs)
 
 def infer_save_y_pred(path, y_pred):
     """

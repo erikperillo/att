@@ -24,6 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 """
 
+import multiprocessing as mp
+from functools import partial
 import tensorflow as tf
 import sys
 import random
@@ -128,6 +130,17 @@ def mk_preds_dir(base_dir, pattern="inference"):
     os.makedirs(out_dir)
     return out_dir
 
+def load_pre_proc(path, load_fn, pre_proc_fn):
+    x = load_fn(path)
+    x = pre_proc_fn(x)
+    return path, x
+
+def batch_gen(paths, load_fn, pre_proc_fn):
+    fn = partial(load_pre_proc, load_fn=load_fn, pre_proc_fn=pre_proc_fn)
+    pool = mp.Pool(16)
+    for path, x in pool.imap_unordered(fn, paths):
+        yield path, x
+
 def infer():
     """
     Main method. For paths specified in input_paths, computes prediction
@@ -194,14 +207,15 @@ def infer():
 
         #iterating over images doing predictions
         pred_times = []
-        for path in input_paths:
+        #for path in input_paths:
+        for path, x in batch_gen(input_paths, load_fn, pre_proc_fn):
             print("on file '{}'".format(path))
 
             #loading
-            x = load_fn(path)
+            #x = load_fn(path)
 
             #pre-processing
-            x = pre_proc_fn(x)
+            #x = pre_proc_fn(x)
 
             #predicting
             print("\tpredicting...", flush=True, end=" ")

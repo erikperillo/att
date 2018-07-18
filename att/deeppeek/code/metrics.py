@@ -6,6 +6,7 @@ import pandas as pd
 import os.path as op
 import multiprocessing as mp
 import skimage.io as io
+import json
 import skimage.transform as skt
 import glob
 import sys
@@ -194,6 +195,9 @@ def compute():
             sys.exc_info()[1]).split()))
 
 JUDD_DSET_PATH = "/home/erik/data/sal-dsets/judd"
+CAT2000_DSET_PATH = "/home/erik/data/sal-dsets/cat2000"
+SALICON_DSET_PATH = "/home/erik/data/sal-dsets/salicon"
+
 METRICS = [
     "auc_judd",
     "nss",
@@ -201,6 +205,18 @@ METRICS = [
     "cc",
     "sim",
 ]
+
+def get_y_true_fixmap_path_cat2000(y_pred_path):
+    y_pred_path = os.path.abspath(y_pred_path)
+    filename = os.path.basename(y_pred_path).replace(".png", ".jpg")
+    path = os.path.join(CAT2000_DSET_PATH, "maps", filename)
+    return path
+
+def get_y_true_fixpts_path_cat2000(y_pred_path):
+    y_pred_path = os.path.abspath(y_pred_path)
+    filename = os.path.basename(y_pred_path)
+    path = os.path.join(CAT2000_DSET_PATH, "points", filename)
+    return path
 
 def get_y_true_fixmap_path_judd(y_pred_path):
     y_pred_path = os.path.abspath(y_pred_path)
@@ -212,6 +228,18 @@ def get_y_true_fixpts_path_judd(y_pred_path):
     y_pred_path = os.path.abspath(y_pred_path)
     filename = os.path.basename(y_pred_path).replace(".png", "_fixPts.jpg")
     path = os.path.join(JUDD_DSET_PATH, "points", filename)
+    return path
+
+def get_y_true_fixmap_path_salicon(y_pred_path):
+    y_pred_path = os.path.abspath(y_pred_path)
+    filename = os.path.basename(y_pred_path)
+    path = os.path.join(SALICON_DSET_PATH, "maps", filename)
+    return path
+
+def get_y_true_fixpts_path_salicon(y_pred_path):
+    y_pred_path = os.path.abspath(y_pred_path)
+    filename = os.path.basename(y_pred_path)
+    path = os.path.join(SALICON_DSET_PATH, "points", filename)
     return path
 
 def load_fixmap(path):
@@ -232,8 +260,8 @@ def load_fixpts(path):
 def get_stats(y_pred_path):
     #loading files
     y_pred = load_fixmap(y_pred_path)
-    y_true_fixmap = load_fixmap(get_y_true_fixmap_path_judd(y_pred_path))
-    y_true_fixpts = load_fixpts(get_y_true_fixpts_path_judd(y_pred_path))
+    y_true_fixmap = load_fixmap(get_y_true_fixmap_path_cat2000(y_pred_path))
+    y_true_fixpts = load_fixpts(get_y_true_fixpts_path_cat2000(y_pred_path))
 
     #reshaping
     if y_pred.shape != y_true_fixmap.shape:
@@ -253,7 +281,7 @@ def get_stats(y_pred_path):
     return dct
 
 def main():
-    paths = glob.glob("/home/erik/preds-14/*.png")
+    paths = glob.glob("/home/erik/preds-32/*.png")
     print("working on {} paths".format(len(paths)))
 
     pool = mp.Pool(16)
@@ -264,6 +292,14 @@ def main():
     dst_path = "./results-metrics.csv"
     df.to_csv(dst_path, index=False)
     print("saved results to '{}'".format(dst_path))
+
+    dct = {}
+    for c in df.columns:
+        dct[c] = df[c].mean()
+    dst_path = dst_path.replace(".csv", "_means.json")
+    with open(dst_path, "w") as f:
+        json.dump(dct, f, indent=4, sort_keys=True)
+    print("saved results means to '{}'".format(dst_path))
 
 if __name__ == "__main__":
     main()

@@ -198,10 +198,11 @@ def train():
                 log_fn=log_fn,
                 save_model_fn=save_model_fn,
                 save_every_its=conf["save_every_its"],
-                verbose=conf["verbose"],
-                print_fn=log.print,
                 batch_gen_kw=conf["batch_gen_kw"],
                 log_batch_gen_kw=conf["log_batch_gen_kw"],
+                better_loss_tol=conf["better_loss_tol"],
+                verbose=conf["verbose"],
+                print_fn=log.print,
             )
         except KeyboardInterrupt:
             print("Keyboard Interrupt event.")

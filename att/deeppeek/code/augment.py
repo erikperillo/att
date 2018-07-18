@@ -302,6 +302,8 @@ def augment(xy, operations, copy_xy=False, rand_seed=None):
     y = _unit_norm(y, y_minn, y_maxx, "float32")
 
     # randomly applying operations
+    operations = list(operations)
+    rand.shuffle(operations)
     for op_name, op_kwargs, op_prob in operations:
         if rand.uniform(0, 1) <= op_prob:
             x, y = OPS_MAP[op_name](x, y, rand, **op_kwargs)

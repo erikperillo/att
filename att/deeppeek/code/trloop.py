@@ -88,7 +88,7 @@ def batch_gen(
         fetch_thr_augment_fn=_identity,
         fetch_thr_pre_proc_fn=_identity,
         shuffle_paths=True,
-        base_seed=1):
+        base_seed=None):
     """
     Main thread for generation of batches.
     Spans other threads for data loading and processing, gathering the
@@ -100,6 +100,10 @@ def batch_gen(
     #shuffling filepaths
     if shuffle_paths:
         random.shuffle(paths)
+
+    #setting up base random seed
+    if base_seed is None:
+        base_seed = random.randint(1, 2**32 - 1)
 
     batch = []
     #multithread pool
@@ -122,7 +126,6 @@ def batch_gen(
         base_seed += max_n_samples
 
     pool.close()
-    pool.terminate()
     pool.join()
 
 def _val_set_loop(val_set, val_fn, val_batch_gen_kw, print_fn=_no_op):
@@ -152,10 +155,19 @@ def _val_set_loop(val_set, val_fn, val_batch_gen_kw, print_fn=_no_op):
     metrics_mean = {k: v/max(i+1, 1) for k, v in metrics_sum.items()}
     return metrics_mean
 
+def is_better(loss_a, loss_b, tol=1e-3):
+    """
+    Returns true iff loss_a is smaller than loss_b
+    by some (proportional) tolerance.
+    """
+    if loss_a >= loss_b or loss_b == 0:
+        return False
+    return abs((loss_b - loss_a)/loss_b) >= tol
+
 def _val_step(
     val_set, val_fn, val_batch_gen_kw,
     patience, best_loss, no_loss_improv_count,
-    print_fn=_no_op):
+    print_fn=_no_op, better_loss_tol=1e-3):
 
     #calculating metrics over validation dataset
     metrics_mean = _val_set_loop(val_set, val_fn, val_batch_gen_kw, print_fn)
@@ -171,7 +183,7 @@ def _val_step(
 
         loss = metrics_mean["loss"]
         #stopping criteria
-        if best_loss is None or loss < best_loss:
+        if best_loss is None or is_better(loss, best_loss, better_loss_tol):
             best_loss = loss
             no_loss_improv_count = 0
         else:
@@ -189,6 +201,7 @@ def train_loop(
     save_model_fn=_no_op, save_every_its=None,
     batch_gen_kw={},
     log_batch_gen_kw={},
+    better_loss_tol=0.001,
     verbose=2, print_fn=print,
     print_batch_metrics=False):
     """
@@ -240,7 +253,7 @@ def train_loop(
         #main train loop
         for i, (bx, by) in enumerate(batch_gen(train_set, **batch_gen_kw)):
             its += 1
-            
+
             #model update
             loss = train_fn(bx, by)
             loss_sum += loss
@@ -276,10 +289,10 @@ def train_loop(
                 early_stopping, best_val_loss, no_val_loss_improv_count =\
                     _val_step(val_set, val_fn, val_batch_gen_kw,
                         patience, best_val_loss, no_val_loss_improv_count,
-                        info)
+                        info, better_loss_tol)
                 info("----------")
 
-                if best_val_loss_ is None or best_val_loss < best_val_loss_:
+                if best_val_loss_ is None or no_val_loss_improv_count == 0:
                     save_model_fn(name="best")
 
                 if early_stopping:
@@ -310,7 +323,7 @@ def train_loop(
         early_stopping, best_val_loss, no_val_loss_improv_count =\
             _val_step(val_set, val_fn, val_batch_gen_kw,
                 patience, best_val_loss, no_val_loss_improv_count,
-                info)
+                info, better_loss_tol)
         info("----------")
 
         if early_stopping and val_every_its is None:
